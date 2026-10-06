@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Map Playground
 
-## Getting Started
+Inventory map prototype built with Next.js and Mapbox GL. Place vehicles, keys and installation exceptions on a map, draw geofences by plotting points, and see markers change style with zoom. Marker artwork comes from the Figma "Inventory Management → Map Assets" sheet.
 
-First, run the development server:
+## Setup
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+1. Install dependencies:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+   ```bash
+   npm install
+   ```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2. Create `.env.local` with a Mapbox public token:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   NEXT_PUBLIC_MAPBOX_TOKEN=pk.your-mapbox-token
+   ```
 
-## Learn More
+3. Run the dev server and open http://localhost:3000:
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   npm run dev
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## How the map behaves
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Clusters:** vehicles within 40 m of each other form a group. A group of 3 or more stays a numbered cluster until zoom 19. Vehicles on their own always show individually.
+- **Markers:** individual assets show as Figma map markers below zoom 19.
+- **Images:** from zoom 19, every asset shows its image marker.
+- **Vehicles / Keys:** the toggle at the top right switches which assets the map shows.
+- **Map / Satellite:** the switch at the bottom right changes the base map.
 
-## Deploy on Vercel
+All thresholds are adjustable in the **Display** tab. Assets, geofences and settings are saved in the browser's localStorage.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Code map
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `src/components/MapView.tsx`: Mapbox setup, clustering, marker tiers, drawing and drag and drop
+- `src/components/Sidebar.tsx`: left panel (Assets, Geofences, Display)
+- `src/components/markers.tsx`: Figma marker and preview components
+- `src/lib/catalog.ts`: asset types, defaults and settings validation
+- `src/lib/geo.ts`: geometry helpers and distance grouping
+- `src/lib/seed.ts`: demo data around Grapevine, TX
