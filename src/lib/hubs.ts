@@ -25,8 +25,8 @@ export const KEY_HUBS: KeyHub[] = [
 /** Keys that are not in a hub are grouped by where they are. */
 export type KeyGroupId = "lot" | "off";
 export const KEY_GROUPS: { id: KeyGroupId; name: string }[] = [
-  { id: "lot", name: "On the Lot" },
-  { id: "off", name: "Off-Lot" },
+  { id: "lot", name: "In Lot" },
+  { id: "off", name: "Off Lot" },
 ];
 
 export type KeyLocationId = string; // hub id or `group:lot` / `group:off`
@@ -101,4 +101,51 @@ export function seedHubKeys(toyotaVehicles: Asset[]): Asset[] {
     }
   }
   return out;
+}
+
+/** Where off-lot keys are: test drives, service runs, detail shop… (outside the geofence). */
+const OFF_LOT_SPOTS: { position: LngLat; address: string }[] = [
+  { position: [-97.07135, 32.92585], address: "Test drive · Mustang Dr, Grapevine, TX" },
+  { position: [-97.06715, 32.92705], address: "Detail shop · E State Hwy 114, Grapevine, TX" },
+  { position: [-97.07085, 32.92300], address: "Service loaner · W Northwest Hwy, Grapevine, TX" },
+  { position: [-97.06690, 32.92395], address: "Body shop · Bass Pro Dr, Grapevine, TX" },
+];
+
+/**
+ * A few keys that are not in a room: four left in the parking lot next to their car
+ * ("In Lot") and four that went off the lot with someone ("Off Lot"). They are the
+ * second key of single-key vehicles.
+ */
+export function seedLooseKeys(toyotaVehicles: Asset[], hubKeys: Asset[]): Asset[] {
+  const rand = mulberry32(7);
+  const keyed = new Map<string, number>();
+  hubKeys.forEach((k) => k.vehicleId && keyed.set(k.vehicleId, (keyed.get(k.vehicleId) ?? 0) + 1));
+  const singles = toyotaVehicles.filter((v) => v.typeId.startsWith("vehicle") && keyed.get(v.id) === 1);
+  // Spread the picks across the lot rather than taking neighbours.
+  const step = Math.max(1, Math.floor(singles.length / 8));
+  const picks = Array.from({ length: Math.min(8, singles.length) }, (_, i) => singles[i * step]);
+  const kx = 111_320 * Math.cos((32.925 * Math.PI) / 180);
+  const ky = 110_574;
+  let code = 210400;
+  const fence = TOYOTA_GRAPEVINE.fence;
+
+  return picks.map((v, i) => {
+    code += 53 + Math.floor(rand() * 700);
+    if (i < 4) {
+      // In the lot, a few meters from its car (on the driver's seat, the hood, a nearby stall).
+      let pos: LngLat = v.position;
+      for (let t = 0; t < 8; t++) {
+        const ang = rand() * Math.PI * 2;
+        const d = 3 + rand() * 4;
+        const p: LngLat = [v.position[0] + (Math.cos(ang) * d) / kx, v.position[1] + (Math.sin(ang) * d) / ky];
+        if (pointInPolygon(p, fence)) {
+          pos = p;
+          break;
+        }
+      }
+      return { id: `tgv-lk-in-${i + 1}`, typeId: "key", position: pos, reporting: true, code: String(code), address: TOYOTA_GRAPEVINE.address, vehicleId: v.id };
+    }
+    const spot = OFF_LOT_SPOTS[i - 4];
+    return { id: `tgv-lk-off-${i - 3}`, typeId: "key", position: spot.position, reporting: true, code: String(code), address: spot.address, vehicleId: v.id };
+  });
 }

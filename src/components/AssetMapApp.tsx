@@ -7,14 +7,14 @@ import { ChevronUp, PenLine, X } from "lucide-react";
 import MapView from "./MapView";
 import Sidebar, { type SidebarTab } from "./Sidebar";
 import AssetDetail from "./AssetDetail";
-import { RoomKeysOverlay } from "./focus";
+import { GroupKeysOverlay, RoomKeysOverlay } from "./focus";
 import { HubMarkers, KeyLocationPanel, KeysTab, buildLocations } from "./keyHubs";
 import VehicleDetailPanel from "./vehicleDetail";
 import { AssetTypeToggle, batteryLow, EMPTY_FILTERS, FilterBar, GeofenceSelect, Legend, MapBar, NavRail, TopBar, VehicleListPanel, applyFilters, type Filters } from "./toolbox";
 import { DEFAULT_SETTINGS, INITIAL_VIEW, TYPE_BY_ID, inView, isLngLat, normalizeSettings } from "@/lib/catalog";
 import { pointInPolygon } from "@/lib/geo";
 import { seedAssets, seedGeofences, seedToyotaAssets, seedToyotaGeofence } from "@/lib/seed";
-import { keysByLocation, seedHubKeys, type KeyLocationId } from "@/lib/hubs";
+import { keysByLocation, seedHubKeys, seedLooseKeys, type KeyLocationId } from "@/lib/hubs";
 import { type Asset, type DisplaySettings, type AssetView, type FlyRequest, type FlyTarget, type Geofence, type LngLat, type MapStyleId, type Mode } from "@/lib/types";
 
 const STORAGE_KEY = "asset-map:v2";
@@ -40,7 +40,7 @@ interface Persisted {
  * 6 = two keys paired to every vehicle, all stored in the building's rooms.
  * Older saves are upgraded once, keeping the user's own data.
  */
-const SEED_VERSION = 8;
+const SEED_VERSION = 9;
 
 /** Zoom from which key locations show as their own markers. */
 const HUB_ZOOM = 16;
@@ -123,10 +123,12 @@ export default function AssetMapApp() {
       savedFences = [toyota];
       savedAssets = (savedAssets ?? []).filter((a) => a.id.startsWith("tgv-") || pointInPolygon(a.position, toyota.points));
     }
-    if (saved && (saved.seedVersion ?? 1) < 8 && savedAssets) {
-      // Every vehicle gets one or two keys, stored in the building's rooms.
-      const kept = savedAssets.filter((a) => !a.id.startsWith("tgv-hk-"));
-      savedAssets = [...kept, ...seedHubKeys(kept.filter((a) => a.id.startsWith("tgv-v-")))];
+    if (saved && (saved.seedVersion ?? 1) < 9 && savedAssets) {
+      // Every vehicle gets one or two keys: most in the building's rooms, a few in the lot or off it.
+      const kept = savedAssets.filter((a) => !a.id.startsWith("tgv-hk-") && !a.id.startsWith("tgv-lk-"));
+      const vehicles = kept.filter((a) => a.id.startsWith("tgv-v-"));
+      const hubKeys = seedHubKeys(vehicles);
+      savedAssets = [...kept, ...hubKeys, ...seedLooseKeys(vehicles, hubKeys)];
     }
     setAssets(savedAssets ?? seedAssets());
     setGeofences(savedFences ?? seedGeofences());
@@ -265,7 +267,14 @@ export default function AssetMapApp() {
   // From HUB_ZOOM, keys stored in a key location are drawn as that location's marker, not one by
   // one; zoomed further out they simply count toward the clusters.
   const hubsVisible = zoom >= HUB_ZOOM;
-  const mapAssets = useMemo(() => (hubsVisible ? shownAssets.filter((a) => !(a.typeId === "key" && a.hubId)) : shownAssets), [shownAssets, hubsVisible]);
+  const openGroupKeyIds = useMemo(() => {
+    const loc = openLocationId?.startsWith("group:") ? keysByLocation(assets, geofences).get(openLocationId) : undefined;
+    return new Set((loc ?? []).map((k) => k.id));
+  }, [openLocationId, assets, geofences]);
+  const mapAssets = useMemo(
+    () => shownAssets.filter((a) => !(hubsVisible && a.typeId === "key" && a.hubId) && !openGroupKeyIds.has(a.id)),
+    [shownAssets, hubsVisible, openGroupKeyIds],
+  );
   const vehicleById = useMemo(() => new Map(assets.filter((a) => a.typeId.startsWith("vehicle")).map((a) => [a.id, a])), [assets]);
   const locations = useMemo(() => buildLocations(keysByLocation(assets, geofences), roomImages), [assets, geofences, roomImages]);
   const setRoomImage = (hubId: string, dataUrl: string) => {
@@ -306,7 +315,11 @@ export default function AssetMapApp() {
     const loc = locations.find((l) => l.id === id);
     // Land the room right of its key panel (left 16 + 450px); its key tags scatter around it.
     if (loc?.hub) fly({ kind: "point", center: loc.hub.position, zoom: Math.max(zoom, 18.6), offset: [233, 0] });
-    else if (loc?.keys.length) fly({ kind: "bounds", points: loc.keys.map((k) => k.position) });
+    else if (loc?.keys.length) {
+      const w = mapRef.current?.getContainer().clientWidth ?? 1200;
+      const left = Math.min(500, Math.max(40, w - 260));
+      fly({ kind: "bounds", points: loc.keys.map((k) => k.position), padding: { top: 120, bottom: 80, left, right: Math.min(80, Math.max(20, w - left - 200)) }, maxZoom: 18.5 });
+    }
   };
   /** Key ID clicked: open the vehicle it belongs to, but center the map on the key. */
   const openKeyVehicle = (keyId: string) => {
@@ -460,13 +473,12 @@ export default function AssetMapApp() {
             )}
 
             {viewMode === "map" && mapObj && openLocation && showKeys && (
-              <RoomKeysOverlay
-                map={mapObj}
-                center={openLocation.hub?.position ?? openLocation.keys[0]?.position ?? INITIAL_VIEW.center}
-                keys={openLocation.keys}
-                highlightId={hoveredRoomKeyId}
-                onOpenKey={openKeyVehicle}
-              />
+              openLocation.hub ? (
+                <RoomKeysOverlay map={mapObj} center={openLocation.hub.position} keys={openLocation.keys} highlightId={hoveredRoomKeyId} onOpenKey={openKeyVehicle} />
+              ) : (
+                // In Lot / Off Lot: each key tag where the key actually is.
+                <GroupKeysOverlay map={mapObj} keys={openLocation.keys} highlightId={hoveredRoomKeyId} onOpenKey={openKeyVehicle} />
+              )
             )}
 
             {viewMode === "map" && mapObj && showKeys && hubsVisible && (

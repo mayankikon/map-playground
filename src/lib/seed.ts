@@ -1,6 +1,6 @@
 import { mulberry32 } from "./geo";
 import { TOYOTA_GRAPEVINE } from "./toyota-lot";
-import { seedHubKeys } from "./hubs";
+import { seedHubKeys, seedLooseKeys } from "./hubs";
 import type { Asset, Geofence, InventoryAge, LngLat } from "./types";
 
 /** Demo data: Toyota of Grapevine (701 E State Hwy 114, Grapevine, TX), its vehicles and keys. */
@@ -89,7 +89,8 @@ export function seedToyotaAssets(): Asset[] {
   });
 
   // Keys live in the building's key locations, in vehicles on the lot, or off the lot.
-  out.push(...seedHubKeys(out));
+  const hubKeys = seedHubKeys(out);
+  out.push(...hubKeys, ...seedLooseKeys(out, hubKeys));
   return out;
 }
 

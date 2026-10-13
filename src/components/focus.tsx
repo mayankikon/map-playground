@@ -195,3 +195,60 @@ export function RoomKeysOverlay({
     </div>
   );
 }
+
+/** Keys of an In Lot / Off Lot bucket, each drawn as a key tag at its own position. */
+export function GroupKeysOverlay({
+  map,
+  keys,
+  highlightId,
+  onOpenKey,
+}: {
+  map: MbMap;
+  keys: Asset[];
+  highlightId?: string | null;
+  onOpenKey: (keyId: string) => void;
+}) {
+  const refs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useLayoutEffect(() => {
+    const place = () =>
+      keys.forEach((k, i) => {
+        const p = map.project(k.position);
+        const el = refs.current[i];
+        if (el) el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+      });
+    place();
+    map.on("move", place);
+    return () => {
+      map.off("move", place);
+    };
+  }, [map, keys]);
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[6] overflow-hidden [&:has(button:hover)_button:not(:hover)]:opacity-50" aria-label={`${keys.length} keys in this bucket`}>
+      {keys.map((k, i) => (
+        <div
+          key={k.id}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          className="absolute left-0 top-0 size-0"
+        >
+          <button
+            type="button"
+            onClick={() => onOpenKey(k.id)}
+            aria-label={`Open the vehicle for ${k.code ? `key ${k.code}` : "this key"}`}
+            className={`group pointer-events-auto absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 animate-[pop-in_160ms_ease-out_both] transition-opacity duration-150 hover:z-10 ${highlightId === k.id ? "z-10" : highlightId ? "opacity-50" : ""}`}
+          >
+            <KeyMarker active={highlightId === k.id} />
+            <span className="pointer-events-none absolute bottom-[calc(100%-2px)] left-1/2 hidden -translate-x-1/2 group-hover:block">
+              <span className="block w-max">
+                <AssetPreview asset={k} />
+              </span>
+            </span>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
