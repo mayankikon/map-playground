@@ -32,18 +32,17 @@ export interface KeyLocation {
   id: KeyLocationId;
   name: string;
   hub?: KeyHub;
+  /** Photo of the place: the room's own, or one uploaded in the app (rooms and In Lot / Off Lot). */
+  image?: string;
   keys: Asset[];
 }
 
-/** `roomImages` holds photos uploaded in the app, by hub id; they replace the bundled ones. */
-export function buildLocations(byLocation: Map<KeyLocationId, Asset[]>, roomImages: Record<string, string> = {}): KeyLocation[] {
+/** `images` holds photos uploaded in the app, by location id; they replace the bundled ones. */
+export function buildLocations(byLocation: Map<KeyLocationId, Asset[]>, images: Record<string, string> = {}): KeyLocation[] {
   return [
-    ...KEY_HUBS.map((h) => {
-      const hub = roomImages[h.id] ? { ...h, image: roomImages[h.id] } : h;
-      return { id: hub.id, name: hub.name, hub, keys: byLocation.get(hub.id) ?? [] };
-    }),
+    ...KEY_HUBS.map((hub) => ({ id: hub.id, name: hub.name, hub, image: images[hub.id] ?? hub.image, keys: byLocation.get(hub.id) ?? [] })),
     // Lot / off-lot groups only show when they actually hold keys.
-    ...KEY_GROUPS.map((g) => ({ id: `group:${g.id}`, name: g.name, keys: byLocation.get(`group:${g.id}`) ?? [] })).filter((g) => g.keys.length > 0),
+    ...KEY_GROUPS.map((g) => ({ id: `group:${g.id}`, name: g.name, image: images[`group:${g.id}`], keys: byLocation.get(`group:${g.id}`) ?? [] })).filter((g) => g.keys.length > 0),
   ];
 }
 
@@ -52,17 +51,17 @@ const HUB_ICON = { cabinet: KeyRound, showroom: Store, parts: Wrench, tower: Bui
 /** Location artwork: the room photo, an icon tile if a room has none, the pin tile for groups. */
 function LocationTile({ location, className }: { location: KeyLocation; className: string }) {
   const hub = location.hub;
+  if (location.image)
+    return (
+      <span className={`relative block overflow-hidden bg-[#ddd] ${className}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- local / uploaded photo */}
+        <img alt="" src={location.image} className="absolute inset-0 size-full object-cover" />
+      </span>
+    );
   if (!hub)
     return (
       <span className={`grid place-items-center bg-[#e5e5e5] text-[#666] ${className}`}>
         <MapPin size={28} strokeWidth={1.5} />
-      </span>
-    );
-  if (hub.image)
-    return (
-      <span className={`relative block overflow-hidden bg-[#ddd] ${className}`}>
-        {/* eslint-disable-next-line @next/next/no-img-element -- local room photo */}
-        <img alt="" src={hub.image} className="absolute inset-0 size-full object-cover" />
       </span>
     );
   const Icon = HUB_ICON[hub.icon];
@@ -196,8 +195,8 @@ export function KeyLocationPanel({
   onOpenVehicle: (vehicleId: string) => void;
   /** Row hovered (null when the pointer leaves the panel): highlights its tag on the map. */
   onHoverKey?: (keyId: string | null) => void;
-  /** New room photo picked (already downscaled, as a data URL). */
-  onRoomImage?: (hubId: string, dataUrl: string) => void;
+  /** New photo picked for this room or bucket (already downscaled, as a data URL). */
+  onRoomImage?: (locationId: string, dataUrl: string) => void;
   onClose: () => void;
 }) {
   const [hovered, setHovered] = useState<{ id: string; top: number } | null>(null);
@@ -230,9 +229,9 @@ export function KeyLocationPanel({
     >
       <div className="relative shrink-0">
         <LocationTile location={location} className="h-[200px] w-full" />
-        {location.hub && onRoomImage && (
+        {onRoomImage && (
           <label
-            title="Upload a new photo of this room"
+            title={`Upload a new photo of ${location.name}`}
             className="absolute left-3 top-3 grid size-8 cursor-pointer place-items-center rounded-full bg-[#333]/85 text-white hover:bg-[#111] focus-within:ring-2 focus-within:ring-white"
           >
             <Pencil size={15} strokeWidth={2.5} />
@@ -244,9 +243,9 @@ export function KeyLocationPanel({
               onChange={async (e) => {
                 const file = e.currentTarget.files?.[0];
                 e.currentTarget.value = "";
-                if (!file || !location.hub) return;
+                if (!file) return;
                 const url = await downscaleImage(file);
-                if (url) onRoomImage(location.hub.id, url);
+                if (url) onRoomImage(location.id, url);
               }}
             />
           </label>

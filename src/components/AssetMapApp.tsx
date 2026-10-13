@@ -18,7 +18,7 @@ import { keysByLocation, seedHubKeys, seedLooseKeys, type KeyLocationId } from "
 import { type Asset, type DisplaySettings, type AssetView, type FlyRequest, type FlyTarget, type Geofence, type LngLat, type MapStyleId, type Mode } from "@/lib/types";
 
 const STORAGE_KEY = "asset-map:v2";
-/** Room photos uploaded in the app, by hub id (kept apart from the asset data, they are large). */
+/** Room / In Lot / Off Lot photos uploaded in the app, by location id (kept apart from the asset data, they are large). */
 const ROOM_IMAGES_KEY = "asset-map:room-images";
 
 /** Bump when DEFAULT_SETTINGS change so older saved display settings fall back to the new defaults. */
@@ -277,8 +277,8 @@ export default function AssetMapApp() {
   );
   const vehicleById = useMemo(() => new Map(assets.filter((a) => a.typeId.startsWith("vehicle")).map((a) => [a.id, a])), [assets]);
   const locations = useMemo(() => buildLocations(keysByLocation(assets, geofences), roomImages), [assets, geofences, roomImages]);
-  const setRoomImage = (hubId: string, dataUrl: string) => {
-    const next = { ...roomImages, [hubId]: dataUrl };
+  const setRoomImage = (locationId: string, dataUrl: string) => {
+    const next = { ...roomImages, [locationId]: dataUrl };
     setRoomImages(next);
     try {
       localStorage.setItem(ROOM_IMAGES_KEY, JSON.stringify(next));
