@@ -173,7 +173,6 @@ function KeyDetailsCard({ k, vehicle, location, top }: { k: Asset; vehicle?: Ass
           <p className="mt-1 text-[14px] text-[#8f8f8f]">Not paired to a vehicle.</p>
         )}
       </div>
-      <p className="mt-3 text-[12px] text-[#8f8f8f]">Click the Key ID to center on the key, or the vehicle to go to it.</p>
     </div>
   );
 }
