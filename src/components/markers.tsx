@@ -3,6 +3,8 @@
 
 import { FIGMA, TYPE_BY_ID, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog";
 import type { Asset, InventoryAge } from "@/lib/types";
+import { BatteryFull, BatteryLow, BatteryMedium } from "lucide-react";
+import { ago, keyInfo } from "@/lib/vehicleInfo";
 
 /*
  * Map asset anatomy from Figma "Inventory Management" → Map Assets (15099:114724).
@@ -148,12 +150,14 @@ export function AssetPreview({ asset }: { asset: Asset }) {
     );
   }
   if (kind === "key") {
+    const info = keyInfo(asset);
     return (
       <PreviewShell>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <p className="truncate text-[16px] font-semibold text-[#111]">{assetTitle(asset)}</p>
-          <img alt="Battery OK" src={FIGMA.battery} className="block size-6" />
+          <KeyBattery pct={info.batteryPct} />
         </div>
+        <Sub>Last reported: {ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</Sub>
         <Sub>{asset.address || "No address"}</Sub>
       </PreviewShell>
     );
@@ -163,5 +167,17 @@ export function AssetPreview({ asset }: { asset: Asset }) {
       <Title>{assetTitle(asset)}</Title>
       <Sub className={asset.reporting ? "" : "!text-[#B10F2E]"}>{asset.reporting ? "Location up to date" : "Not reporting"}</Sub>
     </PreviewShell>
+  );
+}
+
+/** Key tag battery level: icon + percentage, red when low. */
+export function KeyBattery({ pct, className = "" }: { pct: number; className?: string }) {
+  const Icon = pct < 20 ? BatteryLow : pct < 60 ? BatteryMedium : BatteryFull;
+  const low = pct < 20;
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 text-[13px] font-semibold ${low ? "text-[#B10F2E]" : "text-[#126550]"} ${className}`} title={`Key tag battery ${pct}%`}>
+      <Icon size={18} strokeWidth={2} aria-hidden />
+      {pct}%
+    </span>
   );
 }

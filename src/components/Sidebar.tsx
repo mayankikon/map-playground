@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
-  Boxes, Crosshair, Eye, EyeOff, Hexagon, Image as ImageIcon, Layers, LocateFixed, MapPin,
+  Boxes, ChevronDown, Crosshair, Eye, EyeOff, Hexagon, Image as ImageIcon, Layers, LocateFixed, MapPin,
   PenLine, RotateCcw, Search, SlidersHorizontal, Trash2, Undo2,
 } from "lucide-react";
 
@@ -39,6 +39,7 @@ interface Props {
   onSettings: (patch: Partial<DisplaySettings>) => void;
   onResetDemo: () => void;
   onClearAll: () => void;
+  onCollapse?: () => void;
 }
 
 const TABS: { id: SidebarTab; label: string; icon: typeof Boxes }[] = [
@@ -50,8 +51,8 @@ const TABS: { id: SidebarTab; label: string; icon: typeof Boxes }[] = [
 export default function Sidebar(p: Props) {
   const nonReporting = p.assets.filter((a) => !a.reporting).length;
   return (
-    <aside className="z-30 flex h-full w-[360px] shrink-0 flex-col border-r border-stroke bg-white shadow-[4px_0_24px_rgba(0,0,0,.06)]">
-      <header className="flex items-center gap-3 px-5 pb-4 pt-5">
+    <aside aria-label="Map Playground" className="flex h-full w-full flex-col bg-white">
+      <header className="flex items-center gap-3 px-5 pb-4 pt-4">
         <h1 className="min-w-0 font-(family-name:--font-saira-face) text-[20px] font-semibold italic leading-tight text-brand">Map Playground</h1>
         <div className="ml-auto text-right text-[12px] leading-tight text-ink-2">
           <div>
@@ -59,6 +60,11 @@ export default function Sidebar(p: Props) {
           </div>
           {nonReporting > 0 && <div className="text-danger">{nonReporting} non-reporting</div>}
         </div>
+        {p.onCollapse && (
+          <button type="button" onClick={p.onCollapse} aria-label="Collapse Map Playground" className="-mr-2 rounded-md p-1 text-ink-2 hover:bg-canvas hover:text-ink">
+            <ChevronDown size={18} />
+          </button>
+        )}
       </header>
 
       <nav className="mx-5 mb-4 grid grid-cols-3 gap-1 rounded-lg bg-canvas p-1">
@@ -66,11 +72,11 @@ export default function Sidebar(p: Props) {
           <button
             key={id}
             onClick={() => p.onTab(id)}
-            className={`flex items-center justify-center gap-1.5 rounded-md py-1.5 text-[13px] font-semibold transition ${
+            className={`flex items-center justify-center gap-1 rounded-md px-1 py-1.5 text-[12px] font-semibold transition ${
               p.tab === id ? "bg-white text-brand shadow-sm" : "text-ink-2 hover:text-ink"
             }`}
           >
-            <Icon size={14} />
+            <Icon size={13} className="shrink-0" />
             {label}
           </button>
         ))}

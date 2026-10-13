@@ -1,0 +1,8 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="compass">
+<g id="Vector">
+<path d="M6.11436 11.493L10.8717 0.737516C11.2986 -0.245839 12.7014 -0.245839 13.1283 0.737516L17.8856 11.493C17.9602 11.6582 17.9983 11.8308 18 12H6.00006C5.99833 11.8231 6.03643 11.65 6.11436 11.493Z" fill="#E50C0C"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M6.00006 12H18C18.0017 12.1769 17.9636 12.35 17.8856 12.507L13.1283 23.2625C12.7014 24.2458 11.2986 24.2458 10.8717 23.2625L6.11436 12.507C6.03981 12.3418 6.00171 12.1692 6.00006 12Z" fill="#DCDCDC"/>
+</g>
+</g>
+</svg>

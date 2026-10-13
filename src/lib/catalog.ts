@@ -48,14 +48,14 @@ export const styleUrl = (id: MapStyleId) => (MAP_STYLES.find((s) => s.id === id)
 /** Figma "Geofence Boundary" color — every geofence uses it. */
 export const GEOFENCE_COLOR = "#0B6494";
 
-export const inView = (a: Asset, view: AssetView) => (TYPE_BY_ID[a.typeId]?.kind === "key") === (view === "keys");
+export const inView = (a: Asset, view: AssetView) => view === "all" || (TYPE_BY_ID[a.typeId]?.kind === "key") === (view === "keys");
 
 export const DEFAULT_SETTINGS: DisplaySettings = {
-  clusterBelowZoom: 19,
-  groupDistance: 40,
-  clusterMinPoints: 3,
+  clusterBelowZoom: 18,
+  groupDistance: 10,
+  clusterMinPoints: 5,
   imageFromZoom: 19,
-  mapStyle: "streets",
+  mapStyle: "satellite",
 };
 
 /** Fill in missing or invalid display settings (old saves, hot reloads) with safe values. */
@@ -76,9 +76,10 @@ export function normalizeSettings(s?: Partial<DisplaySettings>): DisplaySettings
 export const isLngLat = (p: unknown): p is LngLat =>
   Array.isArray(p) && p.length === 2 && p.every((n) => typeof n === "number" && Number.isFinite(n)) && Math.abs(p[1]) <= 90;
 
+/** Opens on the Toyota of Grapevine geofence (the map also fits to it on load). */
 export const INITIAL_VIEW: { center: LngLat; zoom: number } = {
-  center: [-97.085, 32.932],
-  zoom: 12.4,
+  center: [-97.06912, 32.92502],
+  zoom: 17.4,
 };
 
 export function assetTitle(a: Asset): string {

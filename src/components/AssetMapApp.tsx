@@ -1,27 +1,49 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Car, Globe, KeyRound, Layers, Map as MapIcon, MapPin, Image as ImageIcon, PenLine, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Map as MbMap } from "mapbox-gl";
+import { ChevronUp, PenLine, X } from "lucide-react";
 
 import MapView from "./MapView";
 import Sidebar, { type SidebarTab } from "./Sidebar";
 import AssetDetail from "./AssetDetail";
+import { RoomKeysOverlay } from "./focus";
+import { HubMarkers, KeyLocationPanel, KeysTab, buildLocations } from "./keyHubs";
+import VehicleDetailPanel from "./vehicleDetail";
+import { AssetTypeToggle, batteryLow, EMPTY_FILTERS, FilterBar, GeofenceSelect, Legend, MapBar, NavRail, TopBar, VehicleListPanel, applyFilters, type Filters } from "./toolbox";
 import { DEFAULT_SETTINGS, INITIAL_VIEW, TYPE_BY_ID, inView, isLngLat, normalizeSettings } from "@/lib/catalog";
 import { pointInPolygon } from "@/lib/geo";
-import { seedAssets, seedGeofences } from "@/lib/seed";
-import { zoomTier, type Asset, type DisplaySettings, type AssetView, type FlyRequest, type FlyTarget, type Geofence, type LngLat, type MapStyleId, type Mode } from "@/lib/types";
+import { seedAssets, seedGeofences, seedToyotaAssets, seedToyotaGeofence } from "@/lib/seed";
+import { keysByLocation, seedHubKeys, type KeyLocationId } from "@/lib/hubs";
+import { type Asset, type DisplaySettings, type AssetView, type FlyRequest, type FlyTarget, type Geofence, type LngLat, type MapStyleId, type Mode } from "@/lib/types";
 
 const STORAGE_KEY = "asset-map:v2";
+/** Room photos uploaded in the app, by hub id (kept apart from the asset data, they are large). */
+const ROOM_IMAGES_KEY = "asset-map:room-images";
 
 /** Bump when DEFAULT_SETTINGS change so older saved display settings fall back to the new defaults. */
-const SETTINGS_VERSION = 6;
+const SETTINGS_VERSION = 7;
 
 interface Persisted {
   assets: Asset[];
   geofences: Geofence[];
   settings: DisplaySettings;
   settingsVersion?: number;
+  /** Demo data generations already merged into this save. */
+  seedVersion?: number;
 }
+
+/**
+ * 2 = Toyota of Grapevine lot, 3 = keys paired to vehicles and stored in key locations,
+ * 4 = Toyota lot re-parked with ~100 scattered vehicles (keys re-paired), overlap demo assets removed,
+ * 5 = Toyota of Grapevine only: every other geofence and the assets outside it are removed,
+ * 6 = two keys paired to every vehicle, all stored in the building's rooms.
+ * Older saves are upgraded once, keeping the user's own data.
+ */
+const SEED_VERSION = 8;
+
+/** Zoom from which key locations show as their own markers. */
+const HUB_ZOOM = 16;
 
 function load(): Persisted | null {
   try {
@@ -67,14 +89,54 @@ export default function AssetMapApp() {
   const [view, setView] = useState<AssetView>("vehicles");
   /** Where the "Map" button returns to after Satellite (Streets unless another style was in use). */
   const [lastMapStyle, setLastMapStyle] = useState<MapStyleId>("streets");
+  const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [listOpen, setListOpen] = useState(true);
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [playgroundOpen, setPlaygroundOpen] = useState(false);
+  const [bearing, setBearing] = useState(0);
+  const mapRef = useRef<MbMap | null>(null);
+  const [mapObj, setMapObj] = useState<MbMap | null>(null);
+  const [openLocationId, setOpenLocationId] = useState<KeyLocationId | null>(null);
+  const [hoveredRoomKeyId, setHoveredRoomKeyId] = useState<string | null>(null);
+  const [roomImages, setRoomImages] = useState<Record<string, string>>({});
+  /** Vehicle whose editable card is open next to its details page ("Edit details"). */
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   /* Persistence */
   useEffect(() => {
     const saved = load();
     /* eslint-disable react-hooks/set-state-in-effect -- one-time hydration from localStorage */
-    setAssets(saved?.assets ? saved.assets.filter((a) => isLngLat(a.position)) : seedAssets());
-    setGeofences(saved?.geofences ? saved.geofences.filter((g) => g.points.every(isLngLat)) : seedGeofences());
+    let savedAssets = saved?.assets?.filter((a) => isLngLat(a.position));
+    let savedFences = saved?.geofences?.filter((g) => g.points.every(isLngLat));
+    if (saved && (saved.seedVersion ?? 1) < 2) {
+      savedAssets = [...(savedAssets ?? []), ...seedToyotaAssets()];
+      savedFences = [seedToyotaGeofence(), ...(savedFences ?? [])];
+    } else if (saved && (saved.seedVersion ?? 1) < 4 && savedAssets) {
+      // Re-park the Toyota lot (~100 scattered vehicles, freshly paired keys); drop overlap demo assets.
+      const kept = savedAssets.filter((a) => !/^tgv-(v|d|k|hk)-/.test(a.id) && !a.id.startsWith("demo-"));
+      savedAssets = [...kept, ...seedToyotaAssets()];
+    }
+    if (saved && (saved.seedVersion ?? 1) < 5) {
+      // Keep only Toyota of Grapevine: its geofence and whatever sits inside it.
+      const toyota = seedToyotaGeofence();
+      savedFences = [toyota];
+      savedAssets = (savedAssets ?? []).filter((a) => a.id.startsWith("tgv-") || pointInPolygon(a.position, toyota.points));
+    }
+    if (saved && (saved.seedVersion ?? 1) < 8 && savedAssets) {
+      // Every vehicle gets one or two keys, stored in the building's rooms.
+      const kept = savedAssets.filter((a) => !a.id.startsWith("tgv-hk-"));
+      savedAssets = [...kept, ...seedHubKeys(kept.filter((a) => a.id.startsWith("tgv-v-")))];
+    }
+    setAssets(savedAssets ?? seedAssets());
+    setGeofences(savedFences ?? seedGeofences());
     setSettings(saved?.settingsVersion === SETTINGS_VERSION ? normalizeSettings(saved.settings) : DEFAULT_SETTINGS);
+    try {
+      const imgs = JSON.parse(localStorage.getItem(ROOM_IMAGES_KEY) ?? "{}");
+      if (imgs && typeof imgs === "object") setRoomImages(imgs);
+    } catch {
+      /* ignore bad saved photos */
+    }
     setHydrated(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
@@ -82,7 +144,7 @@ export default function AssetMapApp() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ assets, geofences, settings, settingsVersion: SETTINGS_VERSION } satisfies Persisted));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ assets, geofences, settings, settingsVersion: SETTINGS_VERSION, seedVersion: SEED_VERSION } satisfies Persisted));
     } catch {
       /* storage full or unavailable — keep working in memory */
     }
@@ -113,7 +175,7 @@ export default function AssetMapApp() {
       const id = uid();
       const lot = geofences.find((g) => g.points.length >= 3 && pointInPolygon(position, g.points));
       setAssets((prev) => [...prev, newAsset(id, typeId, position, lot?.address)]);
-      setView(type.kind === "key" ? "keys" : "vehicles");
+      setView((v) => (v === "all" ? v : type.kind === "key" ? "keys" : "vehicles"));
       setSelectedAssetId(id);
       setSelectedGeofenceId(null);
     },
@@ -199,204 +261,397 @@ export default function AssetMapApp() {
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId) ?? null;
   const visibleAssets = useMemo(() => assets.filter((a) => inView(a, view)), [assets, view]);
+  const shownAssets = useMemo(() => applyFilters(visibleAssets, filters, query), [visibleAssets, filters, query]);
+  // From HUB_ZOOM, keys stored in a key location are drawn as that location's marker, not one by
+  // one; zoomed further out they simply count toward the clusters.
+  const hubsVisible = zoom >= HUB_ZOOM;
+  const mapAssets = useMemo(() => (hubsVisible ? shownAssets.filter((a) => !(a.typeId === "key" && a.hubId)) : shownAssets), [shownAssets, hubsVisible]);
+  const vehicleById = useMemo(() => new Map(assets.filter((a) => a.typeId.startsWith("vehicle")).map((a) => [a.id, a])), [assets]);
+  const locations = useMemo(() => buildLocations(keysByLocation(assets, geofences), roomImages), [assets, geofences, roomImages]);
+  const setRoomImage = (hubId: string, dataUrl: string) => {
+    const next = { ...roomImages, [hubId]: dataUrl };
+    setRoomImages(next);
+    try {
+      localStorage.setItem(ROOM_IMAGES_KEY, JSON.stringify(next));
+    } catch {
+      /* storage full: the photo still shows for this session */
+    }
+  };
+  const openLocation = locations.find((l) => l.id === openLocationId) ?? null;
+  const listTab = view === "keys" ? "keys" : "vehicles";
+  const showKeys = view !== "vehicles";
+
+  const selectedIsVehicle = !!selectedAsset && TYPE_BY_ID[selectedAsset.typeId]?.kind === "vehicle";
+  const pairedKeys = useMemo(() => {
+    if (!selectedAsset || !selectedIsVehicle) return [];
+    return assets
+      .filter((a) => a.typeId === "key" && a.vehicleId === selectedAsset.id)
+      .map((key) => {
+        const loc = locations.find((l) => l.keys.includes(key));
+        return { key, locationName: loc?.name ?? "Unknown", position: loc?.hub?.position ?? key.position };
+      });
+  }, [assets, locations, selectedAsset, selectedIsVehicle]);
+
+  // The selected vehicle's paired keys, shown on the map with it (whatever the view).
+  const focusKeys = useMemo(
+    () => (selectedIsVehicle && selectedAsset ? assets.filter((a) => a.typeId === "key" && a.vehicleId === selectedAsset.id) : []),
+    [assets, selectedAsset, selectedIsVehicle],
+  );
+
+  const openKeyLocation = (id: KeyLocationId) => {
+    setOpenLocationId(id);
+    setSelectedAssetId(null);
+    if (view === "vehicles") setView("keys");
+    if (viewMode === "list") setViewMode("map");
+    const loc = locations.find((l) => l.id === id);
+    // Land the room right of its key panel (left 16 + 450px); its key tags scatter around it.
+    if (loc?.hub) fly({ kind: "point", center: loc.hub.position, zoom: Math.max(zoom, 18.6), offset: [233, 0] });
+    else if (loc?.keys.length) fly({ kind: "bounds", points: loc.keys.map((k) => k.position) });
+  };
+  /** Key ID clicked: open the vehicle it belongs to, but center the map on the key. */
+  const openKeyVehicle = (keyId: string) => {
+    const k = assets.find((a) => a.id === keyId);
+    if (!k) return;
+    selectAsset(k.vehicleId && vehicleById.has(k.vehicleId) ? k.vehicleId : k.id);
+    fly({ kind: "point", center: k.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5) });
+  };
+  /** Vehicle clicked: open it and go to it. */
+  /**
+   * Frame a vehicle together with its key tags (they live in the building, often off-screen),
+   * leaving room for the details panel on the left. Returns false if it has no keys.
+   */
+  const frameVehicleWithKeys = (vehicleId: string, onlyIfHidden = false) => {
+    const v = vehicleById.get(vehicleId);
+    const keys = assets.filter((a) => a.typeId === "key" && a.vehicleId === vehicleId);
+    if (!v || !keys.length) return false;
+    const pts = [v.position, ...keys.map((k) => k.position)];
+    const b = mapRef.current?.getBounds();
+    if (onlyIfHidden && b && pts.every((p) => b.contains(p))) return true;
+    // Padding must leave some map: on narrow screens the panel side shrinks to fit.
+    const el = mapRef.current?.getContainer();
+    const w = el?.clientWidth ?? 1200;
+    const h = el?.clientHeight ?? 800;
+    const left = Math.min(460, Math.max(40, w - 260));
+    const pad = { top: Math.min(150, h * 0.3), bottom: Math.min(60, h * 0.1), left, right: Math.min(90, Math.max(20, w - left - 200)) };
+    fly({ kind: "bounds", points: pts, padding: pad, maxZoom: 19.5 });
+    return true;
+  };
+  const openVehicle = (vehicleId: string) => {
+    const v = vehicleById.get(vehicleId);
+    if (!v) return;
+    selectAsset(v.id);
+    if (!frameVehicleWithKeys(v.id)) fly({ kind: "point", center: v.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5) });
+  };
 
   const isSatellite = settings.mapStyle === "satellite";
-  const tier = zoomTier(zoom, settings);
   const placingType = mode.kind === "place" ? TYPE_BY_ID[mode.typeId] : null;
 
-  const TierIcon = tier === "clusters" ? Layers : tier === "markers" ? MapPin : ImageIcon;
+  const selectAndFly = (id: string) => {
+    selectAsset(id);
+    const a = assets.find((x) => x.id === id);
+    if (a && !inView(a, view)) setView(TYPE_BY_ID[a.typeId]?.kind === "key" ? "keys" : "vehicles");
+    if (a && !(a.typeId.startsWith("vehicle") && frameVehicleWithKeys(a.id))) fly({ kind: "point", center: a.position });
+    if (viewMode === "list") setViewMode("map");
+  };
+  const selectGeofence = (id: string) => {
+    setSelectedGeofenceId(id);
+    setSelectedAssetId(null);
+    const g = geofences.find((x) => x.id === id);
+    if (g) fly({ kind: "bounds", points: g.points });
+  };
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-[#e8e8e8] text-[#111]">
-      <Sidebar
-        tab={tab}
-        onTab={setTab}
-        assets={assets}
-        geofences={geofences}
-        settings={settings}
-        zoom={zoom}
-        mode={mode}
-        draft={draft}
-        membership={membership}
-        selectedAssetId={selectedAssetId}
-        selectedGeofenceId={selectedGeofenceId}
-        onPickType={(typeId) => setMode((m) => (m.kind === "place" && m.typeId === typeId ? { kind: "idle" } : { kind: "place", typeId }))}
-        onSelectAsset={(id) => {
-          selectAsset(id);
-          const a = assets.find((x) => x.id === id);
-          if (a && !inView(a, view)) setView(view === "keys" ? "vehicles" : "keys");
-          if (a) fly({ kind: "point", center: a.position });
-        }}
-        onDeleteAsset={deleteAsset}
-        onStartDraw={startDraw}
-        onUndoPoint={() => setDraft((d) => d.slice(0, -1))}
-        onFinishDraw={finishDraft}
-        onCancelMode={cancelMode}
-        onSelectGeofence={(id) => {
-          setSelectedGeofenceId(id);
-          setSelectedAssetId(null);
-          const g = geofences.find((x) => x.id === id);
-          if (g) fly({ kind: "bounds", points: g.points });
-        }}
-        onUpdateGeofence={updateGeofence}
-        onDeleteGeofence={deleteGeofence}
-        onSettings={(patch) => setSettings((s) => normalizeSettings({ ...s, ...patch }))}
-        onResetDemo={() => {
-          setAssets(seedAssets());
-          setGeofences(seedGeofences());
-          setSelectedAssetId(null);
-          setSelectedGeofenceId(null);
-        }}
-        onClearAll={() => {
-          setAssets([]);
-          setGeofences([]);
-          setSelectedAssetId(null);
-          setSelectedGeofenceId(null);
-        }}
-      />
+    <div className="flex h-dvh w-full overflow-hidden bg-white text-[#111]">
+      <NavRail />
 
-      <main className="relative min-w-0 flex-1">
-        {hydrated && (
-          <MapView
-            assets={visibleAssets}
-            geofences={geofences}
-            settings={settings}
-            mode={mode}
-            draft={draft}
-            selectedAssetId={selectedAssetId}
-            selectedGeofenceId={selectedGeofenceId}
-            flyTarget={flyTarget}
-            onPlaceAsset={placeAsset}
-            onMoveAsset={moveAsset}
-            onSelectAsset={selectAsset}
-            onSelectGeofence={setSelectedGeofenceId}
-            onDraftAdd={(p) => setDraft((d) => [...d, p])}
-            onDraftFinish={finishDraft}
-            onZoom={setZoom}
-          />
-        )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar query={query} onQuery={setQuery} />
 
-        {/* Mode banner */}
-        {mode.kind !== "idle" && (
-          <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex justify-center px-4">
-            <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[#111] py-1.5 pl-3 pr-1.5 text-sm text-white shadow-xl">
-              {placingType ? (
-                <>
-                  <span className="h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: placingType.color }} />
-                  <span>
-                    Placing <b>{placingType.name}</b> — click the map to drop, as many as you like
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-brand">
-                    <PenLine size={14} />
-                  </span>
-                  <span>
-                    Drawing geofence · <b>{draft.length}</b> point{draft.length === 1 ? "" : "s"}
-                  </span>
-                  <button
-                    onClick={() => setDraft((d) => d.slice(0, -1))}
-                    disabled={!draft.length}
-                    className="rounded-full px-2.5 py-1 text-xs text-slate-300 hover:bg-white/10 disabled:opacity-40"
-                  >
-                    Undo
-                  </button>
-                  <button
-                    onClick={finishDraft}
-                    disabled={draft.length < 3}
-                    className="rounded-full bg-brand px-3 py-1 text-xs font-medium hover:bg-brand-hover disabled:bg-slate-700 disabled:text-slate-400"
-                  >
-                    Finish
-                  </button>
-                </>
-              )}
-              <button onClick={cancelMode} className="grid h-7 w-7 place-items-center rounded-full hover:bg-white/10" aria-label="Exit mode">
-                <X size={15} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Vehicles / Keys toggle */}
-        <div
-          role="radiogroup"
-          aria-label="Assets shown on the map"
-          className="absolute right-4 top-4 z-20 grid grid-cols-2 gap-1 rounded-xl bg-white p-1 shadow-[0_4px_16px_rgba(0,0,0,.14)] ring-1 ring-stroke"
-        >
-          {(["vehicles", "keys"] as const).map((v) => {
-            const active = view === v;
-            const count = assets.filter((a) => inView(a, v)).length;
-            return (
-              <button
-                key={v}
-                role="radio"
-                aria-checked={active}
-                onClick={() => {
-                  setView(v);
-                  if (selectedAsset && !inView(selectedAsset, v)) setSelectedAssetId(null);
-                }}
-                className={`flex items-center justify-center gap-2 rounded-lg px-4 py-1.5 text-[14px] font-semibold transition ${
-                  active ? "bg-brand text-white shadow-sm" : "text-ink-2 hover:bg-canvas hover:text-ink"
-                }`}
-              >
-                {v === "vehicles" ? <Car size={16} /> : <KeyRound size={16} />}
-                {v === "vehicles" ? "Vehicles" : "Keys"}
-                <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${active ? "bg-white/20" : "bg-canvas"}`}>{count}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Map / Satellite switch (sits left of the zoom controls) */}
-        <div
-          role="radiogroup"
-          aria-label="Base map"
-          className="absolute bottom-[34px] right-[52px] z-10 grid grid-cols-2 gap-1 rounded-xl bg-white p-1 shadow-[0_4px_16px_rgba(0,0,0,.14)] ring-1 ring-stroke"
-        >
-          {([
-            { id: "map", label: "Map", Icon: MapIcon, active: !isSatellite, style: lastMapStyle },
-            { id: "satellite", label: "Satellite", Icon: Globe, active: isSatellite, style: "satellite" as const },
-          ]).map(({ id, label, Icon, active, style }) => (
-            <button
-              key={id}
-              role="radio"
-              aria-checked={active}
-              onClick={() => {
-                if (style === "satellite" && settings.mapStyle !== "satellite") setLastMapStyle(settings.mapStyle);
-                setSettings((s) => normalizeSettings({ ...s, mapStyle: style }));
+        <div className="flex min-h-0 flex-1">
+          {listOpen && viewMode === "map" && (
+            <VehicleListPanel
+              assets={shownAssets}
+              view={view}
+              selectedId={selectedAssetId}
+              onSelect={selectAndFly}
+              onCollapse={() => setListOpen(false)}
+              tab={listTab}
+              onTab={(t) => {
+                setView(t);
+                if (t === "vehicles") setOpenLocationId(null);
+                if (selectedAsset && !inView(selectedAsset, t)) setSelectedAssetId(null);
               }}
-              className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition ${
-                active ? "bg-brand text-white shadow-sm" : "text-ink-2 hover:bg-canvas hover:text-ink"
-              }`}
-            >
-              <Icon size={14} />
-              {label}
-            </button>
-          ))}
-        </div>
+              keysContent={<KeysTab locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />}
+            />
+          )}
 
-        {/* Zoom / tier indicator */}
-        <div className="absolute bottom-4 left-4 z-10 flex items-center gap-2 rounded-full bg-white/95 py-1.5 pl-1.5 pr-3 text-xs shadow-md ring-1 ring-slate-200 backdrop-blur">
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-50 text-brand">
-            <TierIcon size={13} />
-          </span>
-          <span className="font-semibold capitalize">{tier}</span>
-          <span className="text-slate-400">·</span>
-          <span className="tabular-nums text-slate-500">z {zoom.toFixed(1)}</span>
-        </div>
+          <main className="relative min-w-0 flex-1 border-l border-[#dcdcdc]">
+            {hydrated && (
+              <MapView
+                assets={mapAssets}
+                geofences={geofences}
+                settings={settings}
+                mode={mode}
+                draft={draft}
+                selectedAssetId={selectedAssetId}
+                selectedGeofenceId={selectedGeofenceId}
+                flyTarget={flyTarget}
+                onPlaceAsset={placeAsset}
+                onMoveAsset={moveAsset}
+                onSelectAsset={(id) => {
+                  selectAsset(id);
+                  if (id && vehicleById.has(id)) frameVehicleWithKeys(id, true);
+                }}
+                onSelectGeofence={setSelectedGeofenceId}
+                onDraftAdd={(p) => setDraft((d) => [...d, p])}
+                onDraftFinish={finishDraft}
+                onZoom={setZoom}
+                focusVehicle={selectedIsVehicle ? selectedAsset : null}
+                focusKeys={focusKeys}
+                dim={!!openLocation && showKeys && viewMode === "map"}
+                onReady={(m) => {
+                  mapRef.current = m;
+                  setMapObj(m);
+                  // Open framed on the Toyota of Grapevine geofence.
+                  const fence = geofences.find((g) => g.id === "lot-toyota-grapevine")?.points;
+                  if (fence?.length) {
+                    const xs = fence.map((p) => p[0]);
+                    const ys = fence.map((p) => p[1]);
+                    m.fitBounds(
+                      [
+                        [Math.min(...xs), Math.min(...ys)],
+                        [Math.max(...xs), Math.max(...ys)],
+                      ],
+                      { padding: { top: 80, bottom: 40, left: 40, right: 80 }, duration: 0 },
+                    );
+                  }
+                  m.on("rotate", () => setBearing(m.getBearing()));
+                }}
+              />
+            )}
 
-        {selectedAsset && (
-          <AssetDetail
-            asset={selectedAsset}
-            geofences={membership.byAsset.get(selectedAsset.id) ?? []}
-            onChange={(patch) => updateAsset(selectedAsset.id, patch)}
-            onDelete={() => deleteAsset(selectedAsset.id)}
-            onClose={() => setSelectedAssetId(null)}
-            onZoomTo={() => fly({ kind: "point", center: selectedAsset.position, zoom: settings.imageFromZoom + 1 })}
-          />
-        )}
-      </main>
+            {viewMode === "list" && (
+              <div className="absolute inset-0 z-20 bg-white pt-[72px]">
+                <VehicleListPanel
+                  assets={shownAssets}
+                  view={view}
+                  selectedId={selectedAssetId}
+                  onSelect={selectAndFly}
+                  full
+                  tab={listTab}
+                  onTab={(t) => setView(t)}
+                  keysContent={<KeysTab locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />}
+                />
+              </div>
+            )}
+
+            <FilterBar filters={filters} onFilters={setFilters} mode={viewMode} onMode={setViewMode} />
+
+            {!listOpen && viewMode === "map" && (
+              <button
+                type="button"
+                onClick={() => setListOpen(true)}
+                aria-label="Show list"
+                className="absolute left-0 top-[80px] z-20 rounded-r-[4px] border border-l-0 border-[#dcdcdc] bg-white py-2 pl-1 pr-1.5 shadow-[0_1px_3px_rgba(0,0,0,.2)] hover:bg-[#f4f4f4]"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- Figma icon */}
+                <img alt="" src="/figma/app/panel-collapse.svg" className="size-6 -scale-x-100" />
+              </button>
+            )}
+
+            {viewMode === "map" && mapObj && openLocation && showKeys && (
+              <RoomKeysOverlay
+                map={mapObj}
+                center={openLocation.hub?.position ?? openLocation.keys[0]?.position ?? INITIAL_VIEW.center}
+                keys={openLocation.keys}
+                highlightId={hoveredRoomKeyId}
+                onOpenKey={openKeyVehicle}
+              />
+            )}
+
+            {viewMode === "map" && mapObj && showKeys && hubsVisible && (
+              <HubMarkers map={mapObj} locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />
+            )}
+
+            {viewMode === "map" && openLocation && showKeys && (
+              <KeyLocationPanel
+                key={openLocation.id}
+                location={openLocation}
+                vehicleById={vehicleById}
+                selectedKeyId={selectedAssetId}
+                onOpenKey={openKeyVehicle}
+                onOpenVehicle={openVehicle}
+                onHoverKey={setHoveredRoomKeyId}
+                onRoomImage={setRoomImage}
+                onClose={() => setOpenLocationId(null)}
+              />
+            )}
+
+            {viewMode === "map" && (
+              <>
+                {/* Vehicle / key toggle (right edge, below the view toggle) */}
+                <div className="absolute right-4 top-[80px] z-20">
+                  <AssetTypeToggle
+                    view={view}
+                    onView={(v) => {
+                      setView(v);
+                      if (v === "vehicles") setOpenLocationId(null);
+                      if (selectedAsset && !inView(selectedAsset, v)) setSelectedAssetId(null);
+                    }}
+                  />
+                </div>
+
+                {/* Bottom-right: geofence + legend, then the map bar */}
+                <div className="pointer-events-none absolute bottom-7 right-4 z-20 flex items-end gap-4">
+                  <div className="pointer-events-auto flex flex-col items-end gap-4">
+                    <GeofenceSelect geofences={geofences} selectedId={selectedGeofenceId} onSelect={selectGeofence} />
+                    <Legend />
+                  </div>
+                  <div className="pointer-events-auto">
+                    <MapBar
+                      satellite={isSatellite}
+                      bearing={bearing}
+                      onLayers={() => {
+                        if (!isSatellite) setLastMapStyle(settings.mapStyle);
+                        setSettings((s) => normalizeSettings({ ...s, mapStyle: isSatellite ? lastMapStyle : "satellite" }));
+                      }}
+                      onZoomIn={() => mapRef.current?.zoomIn()}
+                      onZoomOut={() => mapRef.current?.zoomOut()}
+                      onNorth={() => mapRef.current?.resetNorthPitch()}
+                    />
+                  </div>
+                </div>
+
+                {/* Map Playground: collapsible dropdown, bottom right next to the legend */}
+                <div className="absolute bottom-7 right-[358px] z-30 flex flex-col items-end">
+                  {playgroundOpen ? (
+                    <div className="flex h-[min(680px,calc(100vh-230px))] w-[380px] flex-col overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white shadow-[0_12px_32px_rgba(0,0,0,.22)] animate-[pop-in_140ms_ease-out]">
+                      <Sidebar
+                        tab={tab}
+                        onTab={setTab}
+                        assets={assets}
+                        geofences={geofences}
+                        settings={settings}
+                        zoom={zoom}
+                        mode={mode}
+                        draft={draft}
+                        membership={membership}
+                        selectedAssetId={selectedAssetId}
+                        selectedGeofenceId={selectedGeofenceId}
+                        onPickType={(typeId) => setMode((m) => (m.kind === "place" && m.typeId === typeId ? { kind: "idle" } : { kind: "place", typeId }))}
+                        onSelectAsset={selectAndFly}
+                        onDeleteAsset={deleteAsset}
+                        onStartDraw={startDraw}
+                        onUndoPoint={() => setDraft((d) => d.slice(0, -1))}
+                        onFinishDraw={finishDraft}
+                        onCancelMode={cancelMode}
+                        onSelectGeofence={selectGeofence}
+                        onUpdateGeofence={updateGeofence}
+                        onDeleteGeofence={deleteGeofence}
+                        onSettings={(patch) => setSettings((s) => normalizeSettings({ ...s, ...patch }))}
+                        onResetDemo={() => {
+                          setAssets(seedAssets());
+                          setGeofences(seedGeofences());
+                          setSelectedAssetId(null);
+                          setSelectedGeofenceId(null);
+                        }}
+                        onClearAll={() => {
+                          setAssets([]);
+                          setGeofences([]);
+                          setSelectedAssetId(null);
+                          setSelectedGeofenceId(null);
+                        }}
+                        onCollapse={() => setPlaygroundOpen(false)}
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setPlaygroundOpen(true)}
+                      aria-expanded={false}
+                      className="flex items-center gap-2 rounded-[4px] border border-[#dcdcdc] bg-white px-3 py-1.5 shadow-[0_1px_3px_rgba(0,0,0,.2)] hover:border-[#99a3ad]"
+                    >
+                      <span className="font-(family-name:--font-saira-face) text-[16px] font-semibold italic leading-[22px] text-brand">Map Playground</span>
+                      <ChevronUp size={18} className="text-[#666]" />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Mode banner */}
+            {mode.kind !== "idle" && (
+              <div className="pointer-events-none absolute inset-x-0 top-[76px] z-30 flex justify-center px-4">
+                <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-[#111] py-1.5 pl-3 pr-1.5 text-sm text-white shadow-xl">
+                  {placingType ? (
+                    <>
+                      <span className="h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: placingType.color }} />
+                      <span>
+                        Placing <b>{placingType.name}</b> — click the map to drop, as many as you like
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="grid h-7 w-7 place-items-center rounded-full bg-brand">
+                        <PenLine size={14} />
+                      </span>
+                      <span>
+                        Drawing geofence · <b>{draft.length}</b> point{draft.length === 1 ? "" : "s"}
+                      </span>
+                      <button
+                        onClick={() => setDraft((d) => d.slice(0, -1))}
+                        disabled={!draft.length}
+                        className="rounded-full px-2.5 py-1 text-xs text-slate-300 hover:bg-white/10 disabled:opacity-40"
+                      >
+                        Undo
+                      </button>
+                      <button
+                        onClick={finishDraft}
+                        disabled={draft.length < 3}
+                        className="rounded-full bg-brand px-3 py-1 text-xs font-medium hover:bg-brand-hover disabled:bg-slate-700 disabled:text-slate-400"
+                      >
+                        Finish
+                      </button>
+                    </>
+                  )}
+                  <button onClick={cancelMode} className="grid h-7 w-7 place-items-center rounded-full hover:bg-white/10" aria-label="Exit mode">
+                    <X size={15} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {selectedAsset && viewMode === "map" && selectedIsVehicle && (
+              <VehicleDetailPanel
+                key={selectedAsset.id}
+                vehicle={selectedAsset}
+                geofences={membership.byAsset.get(selectedAsset.id) ?? []}
+                keys={pairedKeys}
+                batteryLow={batteryLow(selectedAsset)}
+                onClose={() => {
+                  setSelectedAssetId(null);
+                  setEditingId(null);
+                }}
+                onFly={(p) => fly({ kind: "point", center: p, zoom: Math.max(zoom, settings.imageFromZoom + 0.3) })}
+                onUpdate={(patch) => updateAsset(selectedAsset.id, patch)}
+                onEdit={() => setEditingId(selectedAsset.id)}
+                onDelete={() => deleteAsset(selectedAsset.id)}
+              />
+            )}
+
+            {selectedAsset && viewMode === "map" && (!selectedIsVehicle || editingId === selectedAsset.id) && (
+              <AssetDetail
+                asset={selectedAsset}
+                geofences={membership.byAsset.get(selectedAsset.id) ?? []}
+                onChange={(patch) => updateAsset(selectedAsset.id, patch)}
+                onDelete={() => deleteAsset(selectedAsset.id)}
+                onClose={() => (selectedIsVehicle ? setEditingId(null) : setSelectedAssetId(null))}
+                onZoomTo={() => fly({ kind: "point", center: selectedAsset.position, zoom: settings.imageFromZoom + 1 })}
+              />
+            )}
+          </main>
+        </div>
+      </div>
     </div>
   );
 }

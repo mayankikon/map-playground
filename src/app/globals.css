@@ -59,6 +59,11 @@ body {
 .img-marker-host:hover {
   z-index: 5;
 }
+/* Everything except the selected vehicle and its keys fades while a vehicle is focused */
+.img-marker-host.is-dim {
+  opacity: 0.5;
+}
+/* Leader lines from the selected vehicle to its keys */
 .img-marker-host > * {
   transform-origin: bottom center;
   animation: marker-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -87,3 +92,11 @@ body {
   border-radius: 10px !important;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12) !important;
 }
+
+/* Fades used by the vehicle photo carousel */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+

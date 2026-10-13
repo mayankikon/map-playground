@@ -34,10 +34,18 @@ export interface Asset {
   image?: string;
   /** Show the "No Image" placeholder instead of a photo. */
   noImage?: boolean;
+  /** Pinned with "Mark as Featured" on the details page. */
+  featured?: boolean;
+  /** Free-text remark added from the details page. */
+  remark?: string;
 
   /* Key / device */
   code?: string;
   address?: string;
+  /** Key: the key cabinet / office it is stored in (see KEY_HUBS). */
+  hubId?: string;
+  /** Key: the vehicle this key belongs to. */
+  vehicleId?: string;
 }
 
 export interface Geofence {
@@ -63,7 +71,8 @@ export interface DisplaySettings {
 }
 
 /** Which asset family the map shows. Installation exceptions belong to vehicles. */
-export type AssetView = "vehicles" | "keys";
+export type AssetView = "vehicles" | "keys" | "all";
+
 
 export type Mode =
   | { kind: "idle" }
@@ -71,8 +80,8 @@ export type Mode =
   | { kind: "draw" };
 
 export type FlyRequest =
-  | { kind: "point"; center: LngLat; zoom?: number }
-  | { kind: "bounds"; points: LngLat[] };
+  | { kind: "point"; center: LngLat; zoom?: number; /** px shift of the target from the map center */ offset?: [number, number] }
+  | { kind: "bounds"; points: LngLat[]; padding?: { top: number; bottom: number; left: number; right: number }; maxZoom?: number };
 
 export type FlyTarget = FlyRequest & { nonce: number };
 

@@ -1,124 +1,102 @@
 import { mulberry32 } from "./geo";
+import { TOYOTA_GRAPEVINE } from "./toyota-lot";
+import { seedHubKeys } from "./hubs";
 import type { Asset, Geofence, InventoryAge, LngLat } from "./types";
 
-/** Demo data around Grapevine, TX (the address used in the Figma previews). */
-
-interface Lot {
-  name: string;
-  address: string;
-  center: LngLat;
-  half: [number, number];
-  vehicles: number;
-  keys: number;
-  devices: number;
-}
-
-const LOTS: Lot[] = [
-  { name: "Classic Chevrolet", address: "1101 W State Hwy 114, Grapevine, TX 76051", center: [-97.0975, 32.9395], half: [0.0032, 0.0019], vehicles: 34, keys: 7, devices: 2 },
-  { name: "Overflow Lot B", address: "2400 Ira E Woods Ave, Grapevine, TX 76051", center: [-97.0705, 32.9285], half: [0.0024, 0.0015], vehicles: 18, keys: 3, devices: 1 },
-  { name: "Service Center", address: "700 W Northwest Hwy, Grapevine, TX 76051", center: [-97.1105, 32.9205], half: [0.0018, 0.0012], vehicles: 12, keys: 2, devices: 2 },
-];
-
-const MODELS: [string, string, number][] = [
-  ["BMW", "330i", 34085],
-  ["Chevrolet", "Silverado 1500", 48990],
-  ["Chevrolet", "Equinox", 29450],
-  ["Chevrolet", "Tahoe", 61200],
-  ["Chevrolet", "Malibu", 24780],
-  ["Chevrolet", "Traverse", 39900],
-  ["Chevrolet", "Colorado", 33650],
-  ["Ford", "F-150", 41500],
-  ["Honda", "Accord", 26300],
-  ["Toyota", "RAV4", 30150],
-];
+/** Demo data: Toyota of Grapevine (701 E State Hwy 114, Grapevine, TX), its vehicles and keys. */
 
 const VIN_CHARS = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
 
 export function seedAssets(): Asset[] {
-  const rand = mulberry32(7);
-  const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
-  const digits = (n: number) => Array.from({ length: n }, () => Math.floor(rand() * 10)).join("");
-  const out: Asset[] = [];
-  // Vehicles sit in parking rows: ~16 m apart along a row, rows ~30 m apart.
-  const M_LAT = 1 / 111_320;
-  const mLng = (lat: number) => 1 / (111_320 * Math.cos((lat * Math.PI) / 180));
-  const PER_ROW = 8;
-  const inRow = (lot: Lot, i: number): LngLat => {
-    const rows = Math.ceil(lot.vehicles / PER_ROW);
-    const col = i % PER_ROW;
-    const row = Math.floor(i / PER_ROW);
-    const dx = (col - (PER_ROW - 1) / 2) * 16 + (rand() - 0.5) * 2;
-    const dy = (row - (rows - 1) / 2) * 30 + (rand() - 0.5) * 2;
-    return [lot.center[0] + dx * mLng(lot.center[1]), lot.center[1] + dy * M_LAT];
-  };
-  const at = (lot: Lot, spread = 0.85): LngLat => [
-    lot.center[0] + (rand() * 2 - 1) * lot.half[0] * spread,
-    lot.center[1] + (rand() * 2 - 1) * lot.half[1] * spread,
-  ];
+  return seedToyotaAssets();
+}
 
-  for (const lot of LOTS) {
-    for (let i = 0; i < lot.vehicles; i++) {
-      const age: InventoryAge = pick(["new", "new", "new", "mid", "mid", "old"]);
-      const [make, model, base] = pick(MODELS);
-      const isNew = age === "new" && rand() > 0.3;
-      const vin = Array.from({ length: 17 }, () => pick([...VIN_CHARS])).join("");
-      out.push({
-        id: `v-${out.length}`,
-        typeId: `vehicle-${age}`,
-        position: inRow(lot, i),
-        reporting: rand() > 0.12,
-        year: isNew ? 2025 : 2018 + Math.floor(rand() * 7),
-        make,
-        model,
-        vin,
-        stock: vin.slice(-7),
-        condition: isNew ? "New" : "Preowned",
-        price: Math.round((base * (isNew ? 1 : 0.7 + rand() * 0.25)) / 5) * 5,
-        miles: isNew ? Math.floor(rand() * 40) : 8000 + Math.floor(rand() * 60000),
-        noImage: rand() < 0.12,
-      });
+const TOYOTA_MODELS: [string, number][] = [
+  ["Camry", 28400], ["RAV4", 31900], ["Tacoma", 37800], ["Tundra", 52300], ["Highlander", 41200],
+  ["Corolla", 23100], ["4Runner", 44100], ["Sienna", 40900], ["Grand Highlander", 47600], ["Prius", 29600],
+];
+
+/** ~2.75 m stall width: neighbours are parked door to door. */
+const STALL_M = 2.75;
+
+/** ~100 vehicles parked across the traced rows at Toyota of Grapevine, in realistic runs and gaps. */
+export function seedToyotaAssets(): Asset[] {
+  const rand = mulberry32(114);
+  const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
+  const lot = TOYOTA_GRAPEVINE;
+  const kx = 111_320 * Math.cos((lot.rows[0][0][1] * Math.PI) / 180);
+  const ky = 110_574;
+  const out: Asset[] = [];
+
+  // Every stall along the traced rows: all on pavement, inside the geofence, outside the building.
+  const stalls: { r: number; i: number; n: number; position: LngLat }[] = [];
+  lot.rows.forEach(([a, b], r) => {
+    const len = Math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * ky);
+    const n = Math.floor(len / STALL_M) + 1;
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? 0.5 : i / (n - 1);
+      stalls.push({ r, i, n, position: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t] });
     }
-    for (let i = 0; i < lot.keys; i++) {
-      out.push({ id: `k-${out.length}`, typeId: "key", position: at(lot, 0.6), reporting: true, code: digits(7), address: lot.address });
-    }
-    for (let i = 0; i < lot.devices; i++) {
-      out.push({ id: `d-${out.length}`, typeId: "device", position: at(lot), reporting: rand() > 0.5, code: digits(11), address: lot.address });
+  });
+
+  // Park ~100 cars the way lots fill up: runs of 1-6 side by side with gaps between runs,
+  // spread across every part of the lot.
+  const TARGET = 100;
+  const taken = new Set<string>();
+  const slot = (r: number, i: number) => `${r}:${i}`;
+  const free = (r: number, i: number, n: number) => i < 0 || i >= n || !taken.has(slot(r, i));
+  const parked: (typeof stalls)[number][] = [];
+  for (let guard = 0; parked.length < TARGET && guard < 5000; guard++) {
+    const start = stalls[Math.floor(rand() * stalls.length)];
+    const run = [1, 1, 1, 2, 2, 3, 3, 4, 5, 6][Math.floor(rand() * 10)];
+    // Leave an empty stall before and after each run so groups read as separate.
+    if (!free(start.r, start.i - 1, start.n)) continue;
+    for (let k = 0; k < run && parked.length < TARGET; k++) {
+      const i = start.i + k;
+      if (i >= start.n || taken.has(slot(start.r, i)) || !free(start.r, i + 1, start.n)) break;
+      taken.add(slot(start.r, i));
+      parked.push(stalls.find((s) => s.r === start.r && s.i === i)!);
     }
   }
 
-  // A few vehicles parked on their own, away from the lots: these never join a cluster.
-  const STRAYS: [LngLat, InventoryAge][] = [
-    [[-97.0868, 32.9452], "new"],
-    [[-97.1046, 32.9331], "old"],
-    [[-97.0812, 32.9343], "mid"],
-    [[-97.0598, 32.9361], "new"],
-  ];
-  for (const [position, age] of STRAYS) {
-    const [make, model, price] = pick(MODELS);
+  // Equal split of inventory age (green / yellow / red), shuffled so colors mix across the lot.
+  const ages: InventoryAge[] = parked.map((_, n) => (["new", "mid", "old"] as const)[n % 3]);
+  for (let n = ages.length - 1; n > 0; n--) {
+    const m = Math.floor(rand() * (n + 1));
+    [ages[n], ages[m]] = [ages[m], ages[n]];
+  }
+
+  parked.forEach(({ r, i, position }, n) => {
+    const age = ages[n];
+    const [model, base] = pick(TOYOTA_MODELS);
+    const isNew = age === "new";
     const vin = Array.from({ length: 17 }, () => pick([...VIN_CHARS])).join("");
     out.push({
-      id: `v-${out.length}`, typeId: `vehicle-${age}`, position, reporting: true,
-      year: 2022, make, model, vin, stock: vin.slice(-7), condition: "Preowned", price, miles: 21400,
+      id: `tgv-v-${r}-${i}`,
+      typeId: `vehicle-${age}`,
+      position,
+      reporting: rand() > 0.08,
+      year: isNew ? 2026 : 2019 + Math.floor(rand() * 6),
+      make: "Toyota",
+      model,
+      vin,
+      stock: vin.slice(-7),
+      condition: isNew ? "New" : "Preowned",
+      price: Math.round((base * (isNew ? 1 : 0.65 + rand() * 0.25)) / 5) * 5,
+      miles: isNew ? Math.floor(rand() * 25) : 9000 + Math.floor(rand() * 70000),
+      noImage: rand() < 0.08,
     });
-  }
+  });
+
+  // Keys live in the building's key locations, in vehicles on the lot, or off the lot.
+  out.push(...seedHubKeys(out));
   return out;
 }
 
+export function seedToyotaGeofence(): Geofence {
+  return { id: "lot-toyota-grapevine", name: TOYOTA_GRAPEVINE.name, address: TOYOTA_GRAPEVINE.address, visible: true, points: TOYOTA_GRAPEVINE.fence };
+}
+
 export function seedGeofences(): Geofence[] {
-  return LOTS.map((lot, i) => {
-    const [x, y] = lot.center;
-    const [hx, hy] = lot.half;
-    return {
-      id: `lot-${i}`,
-      name: lot.name,
-      address: lot.address,
-      visible: true,
-      points: [
-        [x - hx, y + hy],
-        [x + hx, y + hy * 1.1],
-        [x + hx * 1.05, y - hy],
-        [x - hx, y - hy * 0.95],
-      ],
-    };
-  });
+  return [seedToyotaGeofence()];
 }

@@ -24,9 +24,10 @@ Inventory map prototype built with Next.js and Mapbox GL. Place vehicles, keys a
 
 ## How the map behaves
 
-- **Clusters:** vehicles within 40 m of each other form a group. A group of 3 or more stays a numbered cluster until zoom 19. Vehicles on their own always show individually.
+- **Clusters:** vehicles within 10 m of each other form a group. A group of 5 or more stays a numbered cluster until zoom 18. Vehicles on their own show individually.
 - **Markers:** individual assets show as Figma map markers below zoom 19.
 - **Images:** from zoom 19, every asset shows its image marker.
+- **Base map:** satellite by default.
 - **Vehicles / Keys:** the toggle at the top right switches which assets the map shows.
 - **Map / Satellite:** the switch at the bottom right changes the base map.
 

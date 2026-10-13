@@ -42,7 +42,7 @@ export default function AssetDetail({ asset, geofences, onChange, onDelete, onCl
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="absolute right-4 top-[72px] z-20 flex max-h-[calc(100%-88px)] w-80 flex-col overflow-hidden rounded-2xl bg-white shadow-[0_12px_40px_rgba(0,0,0,.18)] ring-1 ring-stroke">
+    <div className="absolute right-[80px] top-[80px] z-30 flex max-h-[calc(100%-110px)] w-80 flex-col overflow-hidden rounded-2xl bg-white shadow-[0_12px_40px_rgba(0,0,0,.18)] ring-1 ring-stroke">
       <div className="relative grid h-32 shrink-0 place-items-center bg-canvas">
         <div className="pointer-events-none scale-[1.9]">
           <AssetMarker asset={asset} active />

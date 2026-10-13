@@ -11,6 +11,7 @@ import { FIGMA, GEOFENCE_COLOR, INITIAL_VIEW, TYPE_BY_ID, normalizeSettings, sty
 import { centroid, closeRing, groupByDistance } from "@/lib/geo";
 import type { Asset, DisplaySettings, FlyTarget, Geofence, LngLat, Mode, ZoomTier } from "@/lib/types";
 import { AssetMarker, AssetPreview } from "./markers";
+import { FocusOverlay } from "./focus";
 
 export const ASSET_DRAG_MIME = "application/x-asset-type";
 
@@ -30,6 +31,24 @@ interface Props {
   onDraftAdd: (pos: LngLat) => void;
   onDraftFinish: () => void;
   onZoom: (zoom: number) => void;
+  /** Hands the map instance to the app shell for its own zoom / compass controls. */
+  onReady?: (map: MbMap) => void;
+  /** Selected vehicle: always drawn as its image card, with its paired keys; everything else dims. */
+  focusVehicle?: Asset | null;
+  focusKeys?: Asset[];
+  /** Dim every regular marker to 50% (e.g. while a key room is open). */
+  dim?: boolean;
+}
+
+/** 50% opacity on every regular marker layer; hover and click still work. */
+function applyDim(map: MbMap, dim: boolean) {
+  if (!map.getLayer("asset-pins")) return;
+  const o = dim ? 0.5 : 1;
+  map.setPaintProperty("asset-pins", "icon-opacity", o);
+  map.setPaintProperty("clusters", "circle-opacity", o);
+  map.setPaintProperty("clusters", "circle-stroke-opacity", o);
+  map.setPaintProperty("cluster-count", "text-opacity", o);
+  map.setPaintProperty("cluster-shadow", "circle-opacity", dim ? 0.11 : 0.22);
 }
 
 type Hover = { kind: "asset"; id: string } | null;
@@ -252,6 +271,9 @@ function installLayers(map: MbMap, s: DisplaySettings) {
     // Distance groups (built in assetsFC) decide what stays a number up close; this
     // pixel clustering only tidies things up when zoomed far out.
     cluster: true,
+    // Tile all the way down so zooms past clusterMaxZoom get unclustered data
+    // (the default maxzoom of 18 would stretch zoom-18 clusters past the threshold).
+    maxzoom: 22,
     clusterMaxZoom: Math.max(0, s.clusterBelowZoom - 1),
     clusterRadius: 50,
     clusterProperties: { weight: ["+", ["get", "weight"]] },
@@ -294,15 +316,15 @@ function installLayers(map: MbMap, s: DisplaySettings) {
   const hovered = bubbleHoverExpr(null);
   const r = ["step", ["get", "weight"], 15, 100, 18, 1000, 22] as mapboxgl.ExpressionSpecification;
   map.addLayer({
-    id: "cluster-ring", type: "circle", source: "assets", filter: clustered,
+    id: "cluster-ring", type: "circle", source: "assets", maxzoom: s.clusterBelowZoom, filter: clustered,
     paint: { "circle-radius": ["+", r, 10], "circle-color": "#48A991", "circle-opacity": ["case", hovered, 0.4, 0] },
   });
   map.addLayer({
-    id: "cluster-shadow", type: "circle", source: "assets", filter: clustered,
+    id: "cluster-shadow", type: "circle", source: "assets", maxzoom: s.clusterBelowZoom, filter: clustered,
     paint: { "circle-radius": ["+", r, 2], "circle-color": "#000", "circle-opacity": 0.22, "circle-blur": 0.5, "circle-translate": [0, 4] },
   });
   map.addLayer({
-    id: "clusters", type: "circle", source: "assets", filter: clustered,
+    id: "clusters", type: "circle", source: "assets", maxzoom: s.clusterBelowZoom, filter: clustered,
     paint: {
       "circle-radius": r,
       "circle-color": ["case", hovered, "#F1FFFA", "#FFFFFF"],
@@ -311,7 +333,7 @@ function installLayers(map: MbMap, s: DisplaySettings) {
     },
   });
   map.addLayer({
-    id: "cluster-count", type: "symbol", source: "assets", filter: clustered,
+    id: "cluster-count", type: "symbol", source: "assets", maxzoom: s.clusterBelowZoom, filter: clustered,
     layout: { "text-field": ["to-string", ["get", "weight"]], "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"], "text-size": 15, "text-allow-overlap": true },
     paint: { "text-color": "#126550" },
   });
@@ -327,6 +349,18 @@ function installLayers(map: MbMap, s: DisplaySettings) {
       "symbol-sort-key": ["case", ["get", "selected"], 1, 0],
     },
   });
+}
+
+/**
+ * queryRenderedFeatures can throw "feature index out of bounds" when a pointer event
+ * lands while a GeoJSON source is mid-update; treat that frame as "nothing here".
+ */
+function safeQuery(m: MbMap, point: mapboxgl.PointLike, layers: string[]) {
+  try {
+    return m.queryRenderedFeatures(point, { layers: layers.filter((l) => m.getLayer(l)) });
+  } catch {
+    return [];
+  }
 }
 
 /* ---------- Popover that tracks a map coordinate ---------- */
@@ -380,7 +414,6 @@ export default function MapView(props: Props) {
   const [portals, setPortals] = useState<[string, HTMLDivElement][]>([]);
   const [hint, setHint] = useState<string | null>(null);
   const [hover, setHoverState] = useState<Hover>(null);
-
   useLayoutEffect(() => {
     latest.current = props;
   });
@@ -410,8 +443,12 @@ export default function MapView(props: Props) {
     // Distance groups apply only below the cluster zoom; past it every asset is individual.
     groupedRef.current = m.getZoom() < s.clusterBelowZoom;
     const grouping: Grouping = groupedRef.current ? { meters: s.groupDistance, min: s.clusterMinPoints } : null;
-    (m.getSource("assets") as GeoJSONSource | undefined)?.setData(assetsFC(P.assets, P.selectedAssetId, dragRef.current, grouping, groupsRef.current));
+    // The focused vehicle and its keys are drawn by the focus overlay instead.
+    const hidden = new Set([P.focusVehicle?.id, ...(P.focusKeys ?? []).map((k) => k.id)]);
+    const shown = hidden.size > 1 || P.focusVehicle ? P.assets.filter((a) => !hidden.has(a.id)) : P.assets;
+    (m.getSource("assets") as GeoJSONSource | undefined)?.setData(assetsFC(shown, P.selectedAssetId, dragRef.current, grouping, groupsRef.current));
   };
+
   const pushGeofences = (m: MbMap) => {
     const P = latest.current;
     (m.getSource("geofences") as GeoJSONSource | undefined)?.setData(geofencesFC(P.geofences, P.selectedGeofenceId));
@@ -429,6 +466,7 @@ export default function MapView(props: Props) {
     pushAssets(m);
     pushGeofences(m);
     pushDraft(m);
+    applyDim(m, !!latest.current.focusVehicle || !!latest.current.dim);
   };
 
   /* Init map once */
@@ -453,13 +491,13 @@ export default function MapView(props: Props) {
       created = m;
       mapRef.current = m;
       if (process.env.NODE_ENV !== "production") (window as unknown as { __map: MbMap }).__map = m;
-      m.addControl(new mb.NavigationControl({ visualizePitch: true }), "bottom-right");
-      m.addControl(new mb.ScaleControl({ unit: "imperial" }), "bottom-right");
 
       m.on("style.load", () => reinstall(m));
       m.on("load", () => {
         setMap(m);
+        latest.current.onReady?.(m);
         setBounds(m.getBounds());
+        pushAssets(m);
       });
       m.on("zoom", () => {
         const z = m.getZoom();
@@ -467,7 +505,10 @@ export default function MapView(props: Props) {
         latest.current.onZoom(z);
         if (z < normalizeSettings(latest.current.settings).clusterBelowZoom !== groupedRef.current) pushAssets(m);
       });
-      m.on("moveend", () => setBounds(m.getBounds()));
+      m.on("moveend", () => {
+        setBounds(m.getBounds());
+        pushAssets(m);
+      });
 
       // Drag pins to reposition them
       m.on("mousedown", "asset-pins", (e) => {
@@ -514,7 +555,7 @@ export default function MapView(props: Props) {
         }
         if (Date.now() - justDraggedRef.current < 300) return;
 
-        const hits = m.queryRenderedFeatures(e.point, { layers: ["clusters", "asset-pins", "geofence-fill"] });
+        const hits = safeQuery(m, e.point, ["clusters", "asset-pins", "geofence-fill"]);
         const cluster = hits.find((f) => f.layer?.id === "clusters");
         if (cluster && cluster.geometry.type === "Point") {
           const center = cluster.geometry.coordinates as LngLat;
@@ -579,7 +620,7 @@ export default function MapView(props: Props) {
         // Pointer is over an HTML image marker — it manages its own hover.
         if ((e.originalEvent.target as HTMLElement | null)?.closest?.(".img-marker-host")) return;
 
-        const hits = m.queryRenderedFeatures(e.point, { layers: ["asset-pins", "clusters", "geofence-fill"] });
+        const hits = safeQuery(m, e.point, ["asset-pins", "clusters", "geofence-fill"]);
         const pin = hits.find((f) => f.layer?.id === "asset-pins");
         const cluster = hits.find((f) => f.layer?.id === "clusters");
         const fence = hits.find((f) => f.layer?.id === "geofence-fill");
@@ -629,7 +670,10 @@ export default function MapView(props: Props) {
   /* Zoom thresholds changed → rebuild clustered source + layer zoom ranges */
   useEffect(() => {
     const m = mapRef.current;
-    if (m?.isStyleLoaded()) reinstall(m);
+    if (m?.isStyleLoaded()) {
+      reinstall(m);
+      pushAssets(m);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.clusterBelowZoom, settings.imageFromZoom, settings.groupDistance, settings.clusterMinPoints]);
 
@@ -660,11 +704,11 @@ export default function MapView(props: Props) {
     const mb = mbRef.current;
     if (!m || !mb || !flyTarget) return;
     if (flyTarget.kind === "point") {
-      m.flyTo({ center: flyTarget.center, zoom: flyTarget.zoom ?? Math.max(m.getZoom(), settings.imageFromZoom + 0.5), duration: 1200 });
+      m.flyTo({ center: flyTarget.center, zoom: flyTarget.zoom ?? Math.max(m.getZoom(), settings.imageFromZoom + 0.5), offset: flyTarget.offset ?? [0, 0], duration: 1200 });
     } else if (flyTarget.points.length) {
       const b = new mb.LngLatBounds(flyTarget.points[0], flyTarget.points[0]);
       flyTarget.points.forEach((p) => b.extend(p));
-      m.fitBounds(b, { padding: 80, duration: 1000, maxZoom: 18 });
+      m.fitBounds(b, { padding: flyTarget.padding ?? 80, duration: 1000, maxZoom: flyTarget.maxZoom ?? 18 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flyTarget?.nonce]);
@@ -672,6 +716,9 @@ export default function MapView(props: Props) {
   /* Image-style HTML markers when zoomed in past the threshold */
   const tier: ZoomTier = zoom >= settings.imageFromZoom ? "images" : zoom < settings.clusterBelowZoom ? "clusters" : "markers";
   const imageMode = tier === "images";
+  const focusId = props.focusVehicle?.id ?? null;
+  const focusKeyIds = (props.focusKeys ?? []).map((k) => k.id).join(",");
+  const dimmed = !!focusId || !!props.dim;
   useEffect(() => {
     const mb = mbRef.current;
     if (!map || !mb) return;
@@ -682,7 +729,7 @@ export default function MapView(props: Props) {
       const pad = 0.3;
       const w = bounds.getWest(), e = bounds.getEast(), s = bounds.getSouth(), n = bounds.getNorth();
       const dx = (e - w) * pad, dy = (n - s) * pad;
-      visible = assets.filter(({ position: [x, y] }) => x >= w - dx && x <= e + dx && y >= s - dy && y <= n + dy);
+      visible = assets.filter(({ id, position: [x, y] }) => id !== focusId && x >= w - dx && x <= e + dx && y >= s - dy && y <= n + dy);
     }
     const wanted = new Set(visible.map((a) => a.id));
 
@@ -700,7 +747,7 @@ export default function MapView(props: Props) {
       }
       const isKey = TYPE_BY_ID[a.typeId]?.kind === "key";
       const el = document.createElement("div");
-      el.className = "img-marker-host group";
+      el.className = `img-marker-host group${dimmed ? " is-dim" : ""}`;
       const marker = new mb.Marker({ element: el, anchor: isKey ? "center" : "bottom", offset: isKey ? [0, 0] : [0, 1], draggable: true })
         .setLngLat(a.position)
         .addTo(map);
@@ -729,7 +776,16 @@ export default function MapView(props: Props) {
      
     setPortals([...store].map(([id, { el }]) => [id, el]));
      
-  }, [imageMode, assets, bounds, map]);
+  }, [imageMode, assets, bounds, map, focusId, dimmed]);
+
+  /* Focus / dim: re-push data (focused assets leave the layers) and fade everything else */
+  useEffect(() => {
+    // Layers exist even while tiles are still loading mid-flight (isStyleLoaded can be false then).
+    if (!map?.getLayer("asset-pins")) return;
+    pushAssets(map);
+    applyDim(map, dimmed);
+    markersRef.current.forEach(({ el }) => el.classList.toggle("is-dim", dimmed));
+  }, [map, focusId, focusKeyIds, dimmed]);
 
   /* Drop from the sidebar palette */
   const onDrop = (e: React.DragEvent) => {
@@ -776,6 +832,8 @@ export default function MapView(props: Props) {
           <div className="translate-x-3 translate-y-3 whitespace-nowrap rounded-md bg-[#111]/90 px-2 py-1 text-[12px] font-medium text-white shadow">{hint}</div>
         )}
       </div>
+
+      {map && props.focusVehicle && <FocusOverlay map={map} vehicle={props.focusVehicle} keys={props.focusKeys ?? []} />}
 
       {portals.map(([id, el]) => {
         const a = assetById.get(id);
