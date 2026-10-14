@@ -274,7 +274,8 @@ function installLayers(map: MbMap, s: DisplaySettings) {
     // Tile all the way down so zooms past clusterMaxZoom get unclustered data
     // (the default maxzoom of 18 would stretch zoom-18 clusters past the threshold).
     maxzoom: 22,
-    clusterMaxZoom: Math.max(0, s.clusterBelowZoom - 1),
+    // Must be a whole zoom: supercluster indexes integer zooms only (18.6 would match none).
+    clusterMaxZoom: Math.max(0, Math.floor(s.clusterBelowZoom - 1)),
     clusterRadius: 50,
     clusterProperties: { weight: ["+", ["get", "weight"]] },
   });

@@ -8,7 +8,7 @@ import { KeyBattery, PreviewShell } from "./markers";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
 import { KEY_GROUPS, KEY_HUBS, type KeyHub, type KeyLocationId } from "@/lib/hubs";
 import { assetTitle } from "@/lib/catalog";
-import type { Asset, Condition } from "@/lib/types";
+import type { AppVersion, Asset, Condition } from "@/lib/types";
 
 /* ---------------- Shared bits ---------------- */
 
@@ -34,15 +34,22 @@ export interface KeyLocation {
   hub?: KeyHub;
   /** Photo of the place: the room's own, or one uploaded in the app (rooms and In Lot / Off Lot). */
   image?: string;
+  /** V1: a room is shown only as its gateway (gateway id, no photo). */
+  gatewayOnly?: boolean;
   keys: Asset[];
 }
 
 /** `images` holds photos uploaded in the app, by location id; they replace the bundled ones. */
-export function buildLocations(byLocation: Map<KeyLocationId, Asset[]>, images: Record<string, string> = {}): KeyLocation[] {
+export function buildLocations(byLocation: Map<KeyLocationId, Asset[]>, images: Record<string, string> = {}, version: AppVersion = "v2"): KeyLocation[] {
+  const v1 = version === "v1";
   return [
-    ...KEY_HUBS.map((hub) => ({ id: hub.id, name: hub.name, hub, image: images[hub.id] ?? hub.image, keys: byLocation.get(hub.id) ?? [] })),
+    ...KEY_HUBS.map((hub) =>
+      v1
+        ? { id: hub.id, name: hub.gatewayId, hub, gatewayOnly: true, keys: byLocation.get(hub.id) ?? [] }
+        : { id: hub.id, name: hub.name, hub, image: images[hub.id] ?? hub.image, keys: byLocation.get(hub.id) ?? [] },
+    ),
     // Lot / off-lot groups only show when they actually hold keys.
-    ...KEY_GROUPS.map((g) => ({ id: `group:${g.id}`, name: g.name, image: images[`group:${g.id}`], keys: byLocation.get(`group:${g.id}`) ?? [] })).filter((g) => g.keys.length > 0),
+    ...KEY_GROUPS.map((g) => ({ id: `group:${g.id}`, name: g.name, image: v1 ? undefined : images[`group:${g.id}`], keys: byLocation.get(`group:${g.id}`) ?? [] })).filter((g) => g.keys.length > 0),
   ];
 }
 
@@ -51,6 +58,12 @@ const HUB_ICON = { cabinet: KeyRound, showroom: Store, parts: Wrench, tower: Bui
 /** Location artwork: the room photo, an icon tile if a room has none, the pin tile for groups. */
 function LocationTile({ location, className }: { location: KeyLocation; className: string }) {
   const hub = location.hub;
+  if (location.gatewayOnly)
+    return (
+      <span className={`grid place-items-center bg-[#e5e5e5] text-[#1a9375] ${className}`}>
+        <Radio size={28} strokeWidth={1.75} />
+      </span>
+    );
   if (location.image)
     return (
       <span className={`relative block overflow-hidden bg-[#ddd] ${className}`}>
@@ -214,6 +227,8 @@ export function KeyLocationPanel({
   const rows = location.keys.filter((k) => stock === "all" || vehicleById.get(k.vehicleId ?? "")?.condition === stock);
 
   const hoveredKey = hovered ? location.keys.find((k) => k.id === hovered.id) : undefined;
+  // V1 has no place photos: rooms are bare gateways and buckets have no artwork.
+  const showPhoto = !!onRoomImage;
 
   return (
     <>
@@ -227,6 +242,7 @@ export function KeyLocationPanel({
       onKeyDown={(e) => e.key === "Escape" && onClose()}
       className="absolute bottom-4 left-4 top-[76px] z-40 flex w-[450px] flex-col overflow-hidden rounded-[6px] bg-white shadow-[0_8px_28px_rgba(0,0,0,.28)] animate-[pop-in_140ms_ease-out]"
     >
+      {showPhoto ? (
       <div className="relative shrink-0">
         <LocationTile location={location} className="h-[200px] w-full" />
         {onRoomImage && (
@@ -254,11 +270,17 @@ export function KeyLocationPanel({
           <X size={16} strokeWidth={2.5} />
         </button>
       </div>
+      ) : null}
 
       <div className="shrink-0 px-4 pb-3 pt-4">
         <div className="flex items-center gap-2">
           <h2 className="text-[24px] font-semibold leading-tight text-[#111]">{location.name}</h2>
           {location.hub && <OnlineBadge online={location.hub.online} />}
+          {!showPhoto && (
+            <button type="button" onClick={onClose} aria-label="Close" className="ml-auto grid size-8 place-items-center rounded-full text-[#666] hover:bg-[#eee] hover:text-[#111]">
+              <X size={18} strokeWidth={2.5} />
+            </button>
+          )}
         </div>
         <p className="mt-1 text-[18px] text-[#666]">
           {location.keys.length} key{location.keys.length === 1 ? "" : "s"}

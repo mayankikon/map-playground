@@ -11,15 +11,17 @@ export interface KeyHub {
   icon: "cabinet" | "showroom" | "parts" | "tower" | "office";
   /** Photo of the room, from /public/rooms. */
   image?: string;
+  /** Hardware id of the gateway in the room (what V1 shows instead of the room name). */
+  gatewayId: string;
 }
 
 /** Key locations inside the Toyota of Grapevine building. */
 export const KEY_HUBS: KeyHub[] = [
-  { id: "hub-key-room", name: "Key Room", position: [-97.06905, 32.9247], online: true, icon: "cabinet", image: "/rooms/key-room.jpg" },
-  { id: "hub-showroom", name: "Showroom", position: [-97.0693, 32.9249], online: true, icon: "showroom", image: "/rooms/showroom.jpg" },
-  { id: "hub-parts", name: "Parts Department", position: [-97.0688, 32.925], online: true, icon: "parts", image: "/rooms/parts.jpg" },
-  { id: "hub-sales-tower", name: "Sales Tower", position: [-97.06948, 32.92455], online: false, icon: "tower", image: "/rooms/sales-tower.jpg" },
-  { id: "hub-gm-office", name: "GM's Office", position: [-97.0693, 32.92471], online: true, icon: "office", image: "/rooms/gm-office.jpg" },
+  { id: "hub-key-room", name: "Key Room", position: [-97.06905, 32.9247], online: true, icon: "cabinet", image: "/rooms/key-room.jpg", gatewayId: "GW-40121" },
+  { id: "hub-showroom", name: "Showroom", position: [-97.0693, 32.9249], online: true, icon: "showroom", image: "/rooms/showroom.jpg", gatewayId: "GW-40122" },
+  { id: "hub-parts", name: "Parts Department", position: [-97.0688, 32.925], online: true, icon: "parts", image: "/rooms/parts.jpg", gatewayId: "GW-40123" },
+  { id: "hub-sales-tower", name: "Sales Tower", position: [-97.06948, 32.92455], online: false, icon: "tower", image: "/rooms/sales-tower.jpg", gatewayId: "GW-40124" },
+  { id: "hub-gm-office", name: "GM's Office", position: [-97.0693, 32.92471], online: true, icon: "office", image: "/rooms/gm-office.jpg", gatewayId: "GW-40125" },
 ];
 
 /** Keys that are not in a hub are grouped by where they are. */

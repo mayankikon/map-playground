@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Map as MbMap } from "mapbox-gl";
-import { ChevronUp, PenLine, X } from "lucide-react";
+import { FileCode2, PenLine, X } from "lucide-react";
 
 import MapView from "./MapView";
-import Sidebar, { type SidebarTab } from "./Sidebar";
+import { HandoffPanel } from "./handoff";
 import AssetDetail from "./AssetDetail";
 import { GroupKeysOverlay, RoomKeysOverlay } from "./focus";
 import { HubMarkers, KeyLocationPanel, KeysTab, buildLocations } from "./keyHubs";
@@ -15,14 +15,16 @@ import { DEFAULT_SETTINGS, INITIAL_VIEW, TYPE_BY_ID, inView, isLngLat, normalize
 import { pointInPolygon } from "@/lib/geo";
 import { seedAssets, seedGeofences, seedToyotaAssets, seedToyotaGeofence } from "@/lib/seed";
 import { keysByLocation, seedHubKeys, seedLooseKeys, type KeyLocationId } from "@/lib/hubs";
-import { type Asset, type DisplaySettings, type AssetView, type FlyRequest, type FlyTarget, type Geofence, type LngLat, type MapStyleId, type Mode } from "@/lib/types";
+import { type AppVersion, type Asset, type DisplaySettings, type AssetView, type FlyRequest, type FlyTarget, type Geofence, type LngLat, type MapStyleId, type Mode } from "@/lib/types";
 
 const STORAGE_KEY = "asset-map:v2";
 /** Room / In Lot / Off Lot photos uploaded in the app, by location id (kept apart from the asset data, they are large). */
 const ROOM_IMAGES_KEY = "asset-map:room-images";
+const HANDOFF_KEY = "asset-map:handoff";
+const VERSION_KEY = "asset-map:version";
 
 /** Bump when DEFAULT_SETTINGS change so older saved display settings fall back to the new defaults. */
-const SETTINGS_VERSION = 7;
+const SETTINGS_VERSION = 8;
 
 interface Persisted {
   assets: Asset[];
@@ -79,7 +81,6 @@ export default function AssetMapApp() {
   const [settings, setSettings] = useState<DisplaySettings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
 
-  const [tab, setTab] = useState<SidebarTab>("assets");
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [draft, setDraft] = useState<LngLat[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -93,7 +94,25 @@ export default function AssetMapApp() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [listOpen, setListOpen] = useState(true);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
-  const [playgroundOpen, setPlaygroundOpen] = useState(false);
+  // Handoff panel starts open; dismissing it is remembered per browser.
+  const [handoffOpen, setHandoffOpen] = useState(true);
+  const [version, setVersion] = useState<AppVersion>("v2");
+  const changeVersion = (v: AppVersion) => {
+    setVersion(v);
+    try {
+      localStorage.setItem(VERSION_KEY, v);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  const toggleHandoff = (open: boolean) => {
+    setHandoffOpen(open);
+    try {
+      localStorage.setItem(HANDOFF_KEY, open ? "open" : "closed");
+    } catch {
+      /* storage unavailable */
+    }
+  };
   const [bearing, setBearing] = useState(0);
   const mapRef = useRef<MbMap | null>(null);
   const [mapObj, setMapObj] = useState<MbMap | null>(null);
@@ -133,6 +152,12 @@ export default function AssetMapApp() {
     setAssets(savedAssets ?? seedAssets());
     setGeofences(savedFences ?? seedGeofences());
     setSettings(saved?.settingsVersion === SETTINGS_VERSION ? normalizeSettings(saved.settings) : DEFAULT_SETTINGS);
+    try {
+      if (localStorage.getItem(HANDOFF_KEY) === "closed") setHandoffOpen(false);
+      if (localStorage.getItem(VERSION_KEY) === "v1") setVersion("v1");
+    } catch {
+      /* storage unavailable */
+    }
     try {
       const imgs = JSON.parse(localStorage.getItem(ROOM_IMAGES_KEY) ?? "{}");
       if (imgs && typeof imgs === "object") setRoomImages(imgs);
@@ -203,13 +228,6 @@ export default function AssetMapApp() {
   }, []);
 
   /* Geofences */
-  const startDraw = useCallback(() => {
-    setMode({ kind: "draw" });
-    setDraft([]);
-    setSelectedAssetId(null);
-    setTab("geofences");
-  }, []);
-
   const finishDraft = useCallback(() => {
     if (draft.length < 3) return;
     const id = uid();
@@ -226,15 +244,6 @@ export default function AssetMapApp() {
   const cancelMode = useCallback(() => {
     setMode({ kind: "idle" });
     setDraft([]);
-  }, []);
-
-  const updateGeofence = useCallback((id: string, patch: Partial<Geofence>) => {
-    setGeofences((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
-  }, []);
-
-  const deleteGeofence = useCallback((id: string) => {
-    setGeofences((prev) => prev.filter((g) => g.id !== id));
-    setSelectedGeofenceId((s) => (s === id ? null : s));
   }, []);
 
   /* Keyboard shortcuts */
@@ -276,7 +285,7 @@ export default function AssetMapApp() {
     [shownAssets, hubsVisible, openGroupKeyIds],
   );
   const vehicleById = useMemo(() => new Map(assets.filter((a) => a.typeId.startsWith("vehicle")).map((a) => [a.id, a])), [assets]);
-  const locations = useMemo(() => buildLocations(keysByLocation(assets, geofences), roomImages), [assets, geofences, roomImages]);
+  const locations = useMemo(() => buildLocations(keysByLocation(assets, geofences), roomImages, version), [assets, geofences, roomImages, version]);
   const setRoomImage = (locationId: string, dataUrl: string) => {
     const next = { ...roomImages, [locationId]: dataUrl };
     setRoomImages(next);
@@ -375,7 +384,7 @@ export default function AssetMapApp() {
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-white text-[#111]">
-      <NavRail />
+      <NavRail version={version} onVersion={changeVersion} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar query={query} onQuery={setQuery} />
@@ -494,7 +503,7 @@ export default function AssetMapApp() {
                 onOpenKey={openKeyVehicle}
                 onOpenVehicle={openVehicle}
                 onHoverKey={setHoveredRoomKeyId}
-                onRoomImage={setRoomImage}
+                onRoomImage={version === "v2" ? setRoomImage : undefined}
                 onClose={() => setOpenLocationId(null)}
               />
             )}
@@ -534,60 +543,19 @@ export default function AssetMapApp() {
                   </div>
                 </div>
 
-                {/* Map Playground: collapsible dropdown, bottom right next to the legend */}
-                <div className="absolute bottom-7 right-[358px] z-30 flex flex-col items-end">
-                  {playgroundOpen ? (
-                    <div className="flex h-[min(680px,calc(100vh-230px))] w-[380px] flex-col overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white shadow-[0_12px_32px_rgba(0,0,0,.22)] animate-[pop-in_140ms_ease-out]">
-                      <Sidebar
-                        tab={tab}
-                        onTab={setTab}
-                        assets={assets}
-                        geofences={geofences}
-                        settings={settings}
-                        zoom={zoom}
-                        mode={mode}
-                        draft={draft}
-                        membership={membership}
-                        selectedAssetId={selectedAssetId}
-                        selectedGeofenceId={selectedGeofenceId}
-                        onPickType={(typeId) => setMode((m) => (m.kind === "place" && m.typeId === typeId ? { kind: "idle" } : { kind: "place", typeId }))}
-                        onSelectAsset={selectAndFly}
-                        onDeleteAsset={deleteAsset}
-                        onStartDraw={startDraw}
-                        onUndoPoint={() => setDraft((d) => d.slice(0, -1))}
-                        onFinishDraw={finishDraft}
-                        onCancelMode={cancelMode}
-                        onSelectGeofence={selectGeofence}
-                        onUpdateGeofence={updateGeofence}
-                        onDeleteGeofence={deleteGeofence}
-                        onSettings={(patch) => setSettings((s) => normalizeSettings({ ...s, ...patch }))}
-                        onResetDemo={() => {
-                          setAssets(seedAssets());
-                          setGeofences(seedGeofences());
-                          setSelectedAssetId(null);
-                          setSelectedGeofenceId(null);
-                        }}
-                        onClearAll={() => {
-                          setAssets([]);
-                          setGeofences([]);
-                          setSelectedAssetId(null);
-                          setSelectedGeofenceId(null);
-                        }}
-                        onCollapse={() => setPlaygroundOpen(false)}
-                      />
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setPlaygroundOpen(true)}
-                      aria-expanded={false}
-                      className="flex items-center gap-2 rounded-[4px] border border-[#dcdcdc] bg-white px-3 py-1.5 shadow-[0_1px_3px_rgba(0,0,0,.2)] hover:border-[#99a3ad]"
-                    >
-                      <span className="font-(family-name:--font-saira-face) text-[16px] font-semibold italic leading-[22px] text-brand">Map Playground</span>
-                      <ChevronUp size={18} className="text-[#666]" />
-                    </button>
-                  )}
-                </div>
+                {/* Engineering handoff: dismissible spec panel; reopened from the button below. */}
+                {handoffOpen ? (
+                  <HandoffPanel settings={normalizeSettings(settings)} zoom={zoom} version={version} onClose={() => toggleHandoff(false)} />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => toggleHandoff(true)}
+                    className="absolute bottom-7 right-[358px] z-30 flex items-center gap-2 rounded-[4px] border border-[#dcdcdc] bg-white px-3 py-1.5 text-[14px] font-semibold text-[#111] shadow-[0_1px_3px_rgba(0,0,0,.2)] hover:border-[#99a3ad]"
+                  >
+                    <FileCode2 size={16} className="text-brand" />
+                    Handoff specs
+                  </button>
+                )}
               </>
             )}
 

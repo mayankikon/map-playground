@@ -51,10 +51,10 @@ export const GEOFENCE_COLOR = "#0B6494";
 export const inView = (a: Asset, view: AssetView) => view === "all" || (TYPE_BY_ID[a.typeId]?.kind === "key") === (view === "keys");
 
 export const DEFAULT_SETTINGS: DisplaySettings = {
-  clusterBelowZoom: 18,
+  clusterBelowZoom: 18.6,
   groupDistance: 10,
   clusterMinPoints: 5,
-  imageFromZoom: 19,
+  imageFromZoom: 19.2,
   mapStyle: "satellite",
 };
 

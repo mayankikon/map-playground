@@ -92,3 +92,6 @@ export function zoomTier(zoom: number, s: DisplaySettings): ZoomTier {
   if (zoom < s.clusterBelowZoom) return "clusters";
   return "markers";
 }
+
+/** Prototype version: V2 is the current design; V1 is the earlier, gateway-only key panel. */
+export type AppVersion = "v1" | "v2";

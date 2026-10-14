@@ -2,11 +2,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, CircleHelp } from "lucide-react";
+import { Check, ChevronUp, CircleHelp } from "lucide-react";
 
 import { AssetGlyph } from "./markers";
 import { FIGMA, TYPE_BY_ID, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog";
-import type { Asset, AssetView, Geofence, InventoryAge } from "@/lib/types";
+import type { AppVersion, Asset, AssetView, Geofence, InventoryAge } from "@/lib/types";
 
 /*
  * Toolbox app shell from Figma "Inventory Management" → Satellite View
@@ -38,7 +38,7 @@ const NAV: { label: string; icon: string }[] = [
   { label: "Settings", icon: "nav-settings.svg" },
 ];
 
-export function NavRail() {
+export function NavRail({ version, onVersion }: { version: AppVersion; onVersion: (v: AppVersion) => void }) {
   return (
     <nav aria-label="Main" className="flex h-full w-[248px] shrink-0 flex-col items-center gap-4 border-r border-[#126550] bg-[#1a9375] py-6 text-white">
       <div className="w-full pl-4 pr-5">
@@ -75,12 +75,72 @@ export function NavRail() {
         })}
       </ul>
 
+      <VersionSelect version={version} onVersion={onVersion} />
+
       <p className="text-center text-[12px] leading-4">
         © 2026 VBI Group, Inc.
         <br />
         All rights reserved.
       </p>
     </nav>
+  );
+}
+
+const VERSIONS: { id: AppVersion; label: string; hint: string }[] = [
+  { id: "v1", label: "V1", hint: "Gateway IDs, no room photos" },
+  { id: "v2", label: "V2", hint: "Named rooms with photos (current)" },
+];
+
+/** Prototype version switch, bottom of the nav rail; the menu opens upward. */
+function VersionSelect({ version, onVersion }: { version: AppVersion; onVersion: (v: AppVersion) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const current = VERSIONS.find((v) => v.id === version) ?? VERSIONS[1];
+  return (
+    <div ref={ref} className="relative mx-2 mb-3" onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
+      {open && (
+        <ul role="listbox" aria-label="Prototype version" className="absolute bottom-[calc(100%+6px)] left-0 right-0 z-50 overflow-hidden rounded-[6px] bg-white py-1 text-[#111] shadow-[0_8px_24px_rgba(0,0,0,.28)] animate-[pop-in_120ms_ease-out]">
+          {VERSIONS.map((v) => (
+            <li key={v.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={v.id === version}
+                onClick={() => {
+                  onVersion(v.id);
+                  setOpen(false);
+                }}
+                className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-[#f4f4f4]"
+              >
+                <span className="mt-0.5 w-4 shrink-0">{v.id === version && <Check size={14} className="text-[#1a9375]" />}</span>
+                <span>
+                  <span className="block text-[14px] font-semibold">{v.label}</span>
+                  <span className="block text-[12px] text-[#666]">{v.hint}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center justify-between rounded-[6px] border border-white/30 bg-white/10 px-3 py-1.5 text-[14px] hover:bg-white/20"
+      >
+        <span>
+          Version <span className="font-semibold">{current.label}</span>
+        </span>
+        <ChevronUp size={16} className={`transition-transform ${open ? "" : "rotate-180"}`} />
+      </button>
+    </div>
   );
 }
 
