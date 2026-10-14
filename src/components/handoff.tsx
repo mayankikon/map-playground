@@ -100,7 +100,7 @@ function sections(s: DisplaySettings, version: AppVersion): Section[] {
         ["clusters (circle)", "circle-opacity 1 → 0.5, circle-stroke-opacity 1 → 0.5"],
         ["cluster-count (symbol)", "text-opacity 1 → 0.5"],
         ["cluster-shadow (circle)", "circle-opacity 0.22 → 0.11"],
-        ["Image cards (HTML markers)", "CSS opacity 1 → 0.5 (.is-dim)"],
+        ["Image cards (HTML markers)", "CSS opacity 1 → 0.5 on the card inside the marker (.is-dim > *); not on the marker element, Mapbox sets inline opacity there"],
         ["Hover", "Tooltips still open on dimmed markers"],
         ["Expanded gateway", "Same dimming while a gateway or In Lot / Off Lot bucket is open; hovering a key fades the other tags to 50%"],
       ],

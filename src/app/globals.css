@@ -59,11 +59,11 @@ body {
 .img-marker-host:hover {
   z-index: 5;
 }
-/* Everything except the selected vehicle and its keys fades while a vehicle is focused */
-.img-marker-host.is-dim {
+/* Everything except the selected vehicle and its keys fades while a vehicle is focused.
+   Applied to the card, not the host: Mapbox writes an inline opacity on the marker element. */
+.img-marker-host.is-dim > * {
   opacity: 0.5;
 }
-/* Leader lines from the selected vehicle to its keys */
 .img-marker-host > * {
   transform-origin: bottom center;
   animation: marker-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
