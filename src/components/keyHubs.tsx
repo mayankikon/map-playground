@@ -5,6 +5,7 @@ import type { Map as MbMap } from "mapbox-gl";
 import { Briefcase, Building2, ChevronDown, ChevronRight, KeyRound, MapPin, Pencil, Radio, Store, Wrench, X } from "lucide-react";
 
 import { KeyBattery, PreviewShell } from "./markers";
+import { useVersion } from "./version";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
 import { KEY_GROUPS, KEY_HUBS, type KeyHub, type KeyLocationId } from "@/lib/hubs";
 import { assetTitle } from "@/lib/catalog";
@@ -86,6 +87,9 @@ function LocationTile({ location, className }: { location: KeyLocation; classNam
   );
 }
 
+/** V2 room details: the floor a room is on (V1 rooms are bare gateways; buckets have none). */
+const floorOf = (loc: KeyLocation) => (loc.hub && !loc.gatewayOnly ? loc.hub.floor : null);
+
 function OnlineBadge({ online }: { online: boolean }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold ${online ? "bg-[#e3f5ef] text-[#1a9375]" : "bg-[#eee] text-[#8f8f8f]"}`}>
@@ -119,6 +123,7 @@ export function KeysTab({ locations, selectedId, onOpen }: { locations: KeyLocat
                 <span className="block truncate text-[18px] font-semibold text-[#111]">{loc.name}</span>
                 <span className="block text-[16px] text-[#666]">
                   {loc.keys.length} key{loc.keys.length === 1 ? "" : "s"}
+                  {floorOf(loc) && ` · ${floorOf(loc)}`}
                 </span>
               </span>
               {loc.hub && !loc.hub.online && <OnlineBadge online={false} />}
@@ -136,6 +141,8 @@ export function KeysTab({ locations, selectedId, onOpen }: { locations: KeyLocat
 function KeyDetailsCard({ k, vehicle, location, top }: { k: Asset; vehicle?: Asset; location: KeyLocation; top: number }) {
   const online = location.hub?.online ?? true;
   const info = keyInfo(k);
+  // V1: no battery / last reported block — the key, its gateway and its vehicle.
+  const v1 = useVersion() === "v1";
   return (
     <div
       role="tooltip"
@@ -148,10 +155,15 @@ function KeyDetailsCard({ k, vehicle, location, top }: { k: Asset; vehicle?: Ass
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[16px] font-semibold text-[#111]">{assetTitle(k)}</p>
-          <p className="text-[12px] text-[#666]">{location.name}</p>
+          {/* V1: the gateway id; V2: room · floor level. */}
+          <p className="text-[12px] text-[#666]">
+            {location.name}
+            {floorOf(location) && ` · ${floorOf(location)}`}
+          </p>
         </div>
         <OnlineBadge online={online} />
       </div>
+      {!v1 && (
       <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-[#eee] pt-3">
         <div>
           <dt className="text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">Battery</dt>
@@ -164,6 +176,7 @@ function KeyDetailsCard({ k, vehicle, location, top }: { k: Asset; vehicle?: Ass
           <dd className={`mt-0.5 text-[13px] font-semibold ${online ? "text-[#111]" : "text-[#B10F2E]"}`}>{ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</dd>
         </div>
       </dl>
+      )}
       <div className="mt-3 border-t border-[#eee] pt-3">
         <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">Paired vehicle</p>
         {vehicle ? (
@@ -284,6 +297,7 @@ export function KeyLocationPanel({
         </div>
         <p className="mt-1 text-[18px] text-[#666]">
           {location.keys.length} key{location.keys.length === 1 ? "" : "s"}
+          {floorOf(location) && ` · ${floorOf(location)}`}
         </p>
       </div>
 
@@ -429,6 +443,7 @@ function HubMarker({ map, location, selected, onOpen }: { map: MbMap; location: 
                 <span className="text-[16px] font-semibold text-[#111]">{location.name}</span>
                 <OnlineBadge online={online} />
               </span>
+              {floorOf(location) && <span className="mt-0.5 block text-[13px] text-[#666]">{floorOf(location)}</span>}
               <span className="mt-1.5 flex items-center gap-2 rounded-[4px] bg-[#f4f4f4] px-2 py-1 text-[14px] font-semibold text-[#111]">
                 <KeyRound size={14} className="text-[#1a9375]" />
                 {location.keys.length} Keys {online ? "Reporting" : "Last reported"}

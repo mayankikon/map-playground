@@ -6,6 +6,7 @@ import { FileCode2, PenLine, X } from "lucide-react";
 
 import MapView from "./MapView";
 import { HandoffPanel } from "./handoff";
+import { VersionContext } from "./version";
 import AssetDetail from "./AssetDetail";
 import { GroupKeysOverlay, RoomKeysOverlay } from "./focus";
 import { HubMarkers, KeyLocationPanel, KeysTab, buildLocations } from "./keyHubs";
@@ -383,6 +384,7 @@ export default function AssetMapApp() {
   };
 
   return (
+    <VersionContext value={version}>
     <div className="flex h-dvh w-full overflow-hidden bg-white text-[#111]">
       <NavRail version={version} onVersion={changeVersion} />
 
@@ -633,5 +635,6 @@ export default function AssetMapApp() {
         </div>
       </div>
     </div>
+    </VersionContext>
   );
 }

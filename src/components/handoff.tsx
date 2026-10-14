@@ -1,245 +1,272 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, ClipboardCopy, FileCode2, X } from "lucide-react";
+import { Check, ChevronDown, ClipboardCopy, ExternalLink, FileCode2, X } from "lucide-react";
 
 import type { AppVersion, DisplaySettings } from "@/lib/types";
 
 /**
- * Engineering handoff: the behaviour and specs this prototype implements, shown on top
- * of the map so an engineer can poke at the live thing while reading the rules.
- * Values come from the running settings where they exist, so the panel never drifts
- * from what the map actually does.
+ * Engineering handoff, organised by the Jira tickets it answers. Each ticket is a top-level
+ * accordion; inside, every acceptance criterion says how the prototype was designed to meet
+ * it, with the build specs that back it up. Values come from the running settings where
+ * they exist, so the panel never drifts from what the map actually does.
  */
 
 type Row = [label: string, value: string];
 type Status = "covered" | "partial" | "open";
-interface Criterion {
-  /** Requirement as the ticket words it. */
-  req: string;
+
+interface AC {
+  id: string;
+  /** The requirement as the ticket words it. */
+  title: string;
   status: Status;
-  /** How the prototype answers it (or what's missing). */
-  how: string;
+  /** One line: the design answer. Visible while collapsed. */
+  summary: string;
+  /** How we designed it. */
+  design: string[];
+  /** Build specs behind the design. */
+  specs?: Row[];
+  /** What's still missing (partial / open). */
+  gap?: string;
+  /** Live widget shown inside the criterion. */
+  live?: "zoom";
 }
+
 interface Ticket {
   key: string;
   title: string;
-  /** Stories this design ticket unblocks. */
   blocks: string;
-}
-interface Section {
-  id: string;
-  title: string;
-  ticket?: Ticket;
-  intro?: string;
-  criteria?: Criterion[];
-  rows: Row[];
-  notes?: string[];
+  objective: string;
+  decision?: string;
+  acs: AC[];
 }
 
 const JIRA = "https://ikongps.atlassian.net/browse/";
+const STATUS_LABEL: Record<Status, string> = { covered: "Covered", partial: "Partial", open: "Open" };
 
-function sections(s: DisplaySettings, version: AppVersion): Section[] {
+function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
   const c = s.clusterBelowZoom;
   const i = s.imageFromZoom;
   return [
     {
-      id: "overlap",
-      title: "Pin overlap behavior",
-      ticket: { key: "NG4-8068", title: "Define pin overlap behavior across vehicle, key, cluster, and geofence pins", blocks: "NG4-7766 (A-029), NG4-7762 (A-006)" },
-      intro:
-        "Decision: resolve overlap by zoom + aggregation, not by spreading pins on click. Dense vehicles stay a cluster until street zoom; keys in one key box collapse into a single gateway that opens a list. Spider / fan-out was prototyped and dropped (hard to target, breaks at high counts).",
-      criteria: [
+      key: "NG4-8068",
+      title: "Pin overlap behavior across vehicle, key, cluster & geofence pins",
+      blocks: "NG4-7766 (A-029), NG4-7762 (A-006)",
+      objective: "One UX pattern for pins that share or nearly share a coordinate: cars parked bumper-to-bumper, hundreds of key tags in one key box.",
+      decision:
+        "Resolve overlap with zoom + aggregation, not by spreading pins on click. Dense vehicles stay a cluster until street zoom; keys in one key box collapse into a single gateway that opens a list. Spider / fan-out was prototyped and dropped: small targets, and it breaks down at high counts.",
+      acs: [
         {
-          req: "1. Universal interaction pattern",
+          id: "8068-1",
+          title: "Universal interaction pattern",
           status: "covered",
-          how: "Same model for every pin type: count marker (cluster or gateway) → click → expand (zoom in for vehicles, key panel + tags for gateways). Click priority: cluster › pin › geofence. Geofences sit below all pins and have no tooltip, so they never block a pin.",
+          summary: "Every overlap reads the same way: a count marker → click → expand.",
+          design: [
+            "Vehicles: a cluster bubble shows the count; clicking frames its vehicles at a zoom where they separate into pins.",
+            "Keys: a gateway marker stands in for every key in that room; clicking opens the key panel and scatters the room's key tags around the gateway.",
+            "Geofences sit beneath every pin and have no tooltip, so they never block a pin or a cluster.",
+          ],
+          specs: [
+            ["Click priority", "cluster › pin › geofence"],
+            ["Cluster click", `Frame members at zoom ≥ ${c} (easeTo 700 ms)`],
+            ["Gateway click", `Open key panel, fly to zoom ≥ ${Math.max(18.6, c)}, +233 px x-offset to clear the panel, dim the map`],
+            ["Layer order", "geofence fill/line → clusters → pins → HTML image cards → overlays"],
+          ],
         },
         {
-          req: "2. High-density / worst case (500+ keys at one key box)",
+          id: "8068-2",
+          title: "High-density / worst case (500+ keys at one key box)",
           status: "partial",
-          how: "Gateway marker shows the count; the key panel list (scroll + stock-type filter) is the source of truth. Tested with 104 keys in one gateway. Open: at 500+, on-map tags would cover ~1,000 px — propose capping tags (e.g. 150) with “+N more in list”.",
+          summary: "The gateway carries the count; the key panel list is the source of truth.",
+          design: [
+            "One gateway marker per key box, whatever the number of keys, with “N Keys Reporting” on hover.",
+            "The key panel lists every key (scrollable, filter by stock type), so finding a key never depends on picking a tag on the map.",
+            "On open, key tags scatter around the gateway on a sunflower spiral: even density, no overlaps, nearest keys closest to the gateway.",
+          ],
+          specs: [
+            ["Tag spacing", "avg 42 px, min centre distance 41 px (square tags need the diagonal clearance)"],
+            ["Clear ring", "52 px around the gateway marker"],
+            ["Tag size", "Figma Key Marker at 85% → 27 px tag"],
+            ["Tested", "104 keys in one gateway, no overlaps"],
+          ],
+          gap: "At 500+ keys the scatter would span ~1,000 px. Proposal: cap on-map tags (e.g. 150, most recent first) with “+N more in list”. Needs a PM call on the cap.",
         },
         {
-          req: "3. Zoom-level adaptability",
+          id: "8068-3",
+          title: "Zoom-level adaptability",
           status: "covered",
-          how: `Clusters below ${c}, pins ${c}–${i}, image cards from ${i}; dense groups (≥ ${s.clusterMinPoints} within ${s.groupDistance} m) stay clustered until ${c}; gateways from zoom 16. See Zoom tiers.`,
+          summary: `Clusters below ${c} · pins ${c}–${i} · image cards from ${i}.`,
+          design: [
+            "Far out, nearby vehicles merge into clusters so the lot reads as density.",
+            `Clustering is by real distance, not pixels: vehicles within ${s.groupDistance} m of each other stay a cluster until zoom ${c} only when there are at least ${s.clusterMinPoints} of them. A car parked on its own already shows as a pin.`,
+            `From ${c} every vehicle is its own pin; from ${i} pins become photo cards.`,
+            "Keys in rooms collapse into gateways from zoom 16.",
+          ],
+          specs: [
+            [`zoom < ${c}`, "Clusters (count bubble) for dense groups"],
+            [`${c} ≤ zoom < ${i}`, "Map marker pins, coloured by inventory age"],
+            [`zoom ≥ ${i}`, "Image cards, bottom-centre anchored"],
+            ["Far-out tidy-up", `Mapbox clustering radius 50 px up to zoom ${Math.max(0, Math.floor(c - 1))} (clusterMaxZoom must be an integer)`],
+          ],
+          live: "zoom",
         },
         {
-          req: "4. States & micro-interactions",
+          id: "8068-4",
+          title: "States & micro-interactions",
           status: "partial",
-          how: "Hover (tooltip + halo), selected (image card, rest at 50%), expanded/collapsed (gateway panel open/closed) are built — see Selected state. Open: keyboard focus ring for pins/tags not yet defined.",
+          summary: "Hover, selected and expanded/collapsed are built; keyboard focus is not.",
+          design: [
+            "Hover: tooltip card above the marker plus a soft halo; still works on dimmed markers.",
+            "Selected: the vehicle always renders as its image card (any zoom) with its 1–2 key tags; everything else drops to 50%.",
+            "Expanded / collapsed: a gateway opens into its key panel + tags and closes with ✕ or Esc. Hovering a key fades the other tags to 50%.",
+          ],
+          specs: [
+            ["Selected camera", "fitBounds(vehicle + keys), padding T150 B60 L460 R90, maxZoom 19.5"],
+            ["asset-pins", "icon-opacity 1 → 0.5"],
+            ["clusters", "circle-opacity, circle-stroke-opacity 1 → 0.5"],
+            ["cluster-count", "text-opacity 1 → 0.5"],
+            ["cluster-shadow", "circle-opacity 0.22 → 0.11"],
+            ["Image cards", "opacity 0.5 on the card inside the marker (.is-dim > *); Mapbox sets inline opacity on the marker element"],
+          ],
+          gap: "Keyboard focus ring for pins and key tags isn't defined yet (gateways have one).",
         },
-      ],
-      rows: [],
-    },
-    {
-      id: "zoom",
-      title: "Zoom tiers: cluster → pin → image",
-      intro: "Supports NG4-8068 §3. Thresholds are inclusive at the lower bound.",
-      rows: [
-        [`zoom < ${c}`, "Clusters (count bubble) for dense groups; isolated vehicles already show as pins"],
-        [`${c} ≤ zoom < ${i}`, "Map marker pins (Figma pin, coloured by inventory age)"],
-        [`zoom ≥ ${i}`, "Image cards (vehicle photo marker, bottom-centre anchored)"],
-        ["Density rule (below " + c + ")", `Vehicles within ${s.groupDistance} m of each other (single-linkage) stay a cluster when the group has ≥ ${s.clusterMinPoints} vehicles`],
-        ["Cluster click", `Frames the cluster's vehicles at zoom ≥ ${c} so they open up as pins`],
-        ["Far-out tidy-up", "Mapbox pixel clustering, radius 50 px, up to zoom " + Math.max(0, Math.floor(c - 1)) + " (clusterMaxZoom must be an integer)"],
-        ["Gateways", "From zoom 16 (Keys view), keys stored in a room collapse into that room's gateway marker"],
-        ["Selected vehicle", "Always an image card, at every zoom tier"],
-      ],
-    },
-    {
-      id: "focus",
-      title: "Selected state: focus & dimming",
-      intro: "Supports NG4-8068 §4. Selecting a vehicle (list, map, key panel) focuses it; everything else drops to 50% opacity but stays hoverable.",
-      rows: [
-        ["Selected vehicle", "Image card, active state, drawn above the map layers"],
-        ["Paired keys", "Its 1–2 key tags shown at their real positions, full opacity"],
-        ["Camera", "fitBounds(vehicle + its keys), padding T150 B60 L460 R90 (shrinks on narrow maps), maxZoom 19.5"],
-        ["asset-pins (symbol)", "icon-opacity 1 → 0.5"],
-        ["clusters (circle)", "circle-opacity 1 → 0.5, circle-stroke-opacity 1 → 0.5"],
-        ["cluster-count (symbol)", "text-opacity 1 → 0.5"],
-        ["cluster-shadow (circle)", "circle-opacity 0.22 → 0.11"],
-        ["Image cards (HTML markers)", "CSS opacity 1 → 0.5 on the card inside the marker (.is-dim > *); not on the marker element, Mapbox sets inline opacity there"],
-        ["Hover", "Tooltips still open on dimmed markers"],
-        ["Expanded gateway", "Same dimming while a gateway or In Lot / Off Lot bucket is open; hovering a key fades the other tags to 50%"],
       ],
     },
     {
-      id: "keynav",
-      title: "Key → paired vehicle navigation",
-      ticket: { key: "NG4-8100", title: "Define navigation path from key-only map view to paired vehicle details (A-033)", blocks: "NG4-7768 (A-033), NG4-6631, NG4-8167" },
-      intro: "From any key (gateway list, key tag on the map) the user reaches the paired vehicle in one click, without leaving the map.",
-      criteria: [
+      key: "NG4-8100",
+      title: "Navigation from key-only map view to paired vehicle details (A-033)",
+      blocks: "NG4-7768 (A-033), NG4-6631, NG4-8167",
+      objective: "From any key, reach the vehicle it belongs to in one click, without memorising details or switching to the Inventory view.",
+      decision: "The vehicle opens as a side drawer over the map you're already on: no page change, and the map frames the car together with its keys.",
+      acs: [
         {
-          req: "1a. Paired vehicle summary in the slide-out detail panel",
-          status: "covered",
-          how: "Key panel row shows Year Make Model + condition; hovering a row opens the Key Details card with vehicle photo, VIN • stock, condition • price.",
-        },
-        {
-          req: "1b. Paired vehicle summary in the key map popup",
-          status: "open",
-          how: "Map key-tag tooltip shows Key ID, battery, last reported, address — not the vehicle yet. Add Year Make Model + VIN line.",
-        },
-        {
-          req: "1c. Prominent CTA / clickable vehicle title",
-          status: "covered",
-          how: "Vehicle line in each row is a link (hover underline). Key ID is also a link. Clicking a key tag on the map opens its vehicle.",
-        },
-        {
-          req: "2. Navigation & transition model",
-          status: "covered",
-          how: "Opens the Vehicle Detail side drawer (400 px) over the current map — no page change. Vehicle link: frame vehicle + its keys. Key ID link: open vehicle, centre map on the key.",
-        },
-        {
-          req: "3. Empty / Unpaired state",
+          id: "8100-1",
+          title: "Key Detail Card / Popup: paired vehicle summary",
           status: "partial",
-          how: "Row reads “Unpaired key”, card reads “Not paired to a vehicle.” and the vehicle CTA is hidden. Demo data has no unpaired keys yet, so it can't be shown live.",
+          summary: "Key panel rows and the key detail card show the vehicle; the map key tooltip doesn't yet.",
+          design: [
+            "Each row in the key panel shows the Key ID with the vehicle's Year Make Model and condition underneath.",
+            `Hovering a row opens the Key Details card: ${version === "v1" ? "key, gateway ID, status" : "key, room · floor, status, battery, last reported"}, then the paired vehicle's photo, VIN • stock and condition • price.`,
+          ],
+          specs: [
+            ["Key panel", "450 px wide, left 16 / top 76 / bottom 16, radius 6, shadow 0 8 28 rgba(0,0,0,.28)"],
+            ["Row", "Key ID 16 px semibold; vehicle line 14 px #666 + condition colour; last reported 12 px #8F8F8F"],
+            ["Detail card", "300 px, radius 8, beside the panel (left 476 px), aligned to the hovered row"],
+            ["Version", version === "v1" ? "V1 (showing): gateway IDs, no room details; hover card drops battery & last reported" : "V2 (showing): room · floor level, battery ≥20% green / <20% red; V1 drops both"],
+          ],
+          gap: "The tooltip on a key tag on the map shows Key ID, last reported and address, but no vehicle. Add a Year Make Model + VIN line.",
         },
         {
-          req: "4. Consistency with TWEB drawers & popovers",
+          id: "8100-2",
+          title: "Prominent CTA to the vehicle",
           status: "covered",
-          how: "Key panel and vehicle drawer share size rules (left 16 / top 76, radius 6, same shadow), Barlow type scale, link style #007CBE on hover.",
+          summary: "The vehicle title is the link; Key IDs and key tags are links too.",
+          design: [
+            "Vehicle line in a key row: opens the vehicle and frames it with its keys.",
+            "Key ID: opens the vehicle but centres the map on that key, for when you're walking to the key.",
+            "Clicking a key tag on the map opens its vehicle.",
+          ],
+          specs: [
+            ["Link style", "Hover underline; Key ID hover colour #007CBE"],
+          ],
         },
-      ],
-      rows: [],
-    },
-    {
-      id: "rooms",
-      title: "Gateways (key rooms) & key tags",
-      rows: [
-        ["Click gateway", `Opens the key panel, flies to zoom ≥ ${Math.max(18.6, c)} with +233 px x-offset (clears the panel), dims the map`],
-        ["Key tag layout", "Scattered around the gateway: sunflower spiral, avg spacing 42 px, min centre distance 41 px, 52 px clear ring around the gateway"],
-        ["Key tag size", "Figma Key Marker at 85% (27 px tag); fill #17A5E6, 2 px border #336C8B, radius 4, shadow 0 4 4 rgba(0,0,0,.25)"],
-        ["Hover row or tag", "Hovered tag full opacity, all other tags 50%"],
-        ["In Lot / Off Lot", "Keys not in a room: inside the geofence → In Lot, outside → Off Lot (point-in-polygon); tags drawn at real positions"],
-      ],
-    },
-    {
-      id: "keypanel",
-      title: "Key panel",
-      rows: [
-        ["Container", "450 px wide, left 16 / top 76 / bottom 16, radius 6, shadow 0 8 28 rgba(0,0,0,.28), z-40"],
-        ["Version", version === "v1" ? "V1 (showing): rooms named by gateway ID (GW-40121…), no photos, no edit" : "V2 (showing): named rooms with photos; V1 = gateway IDs, no photos, no edit"],
-        ["Header (V2)", "200 px place photo; pencil (top-left) uploads a new photo (downscaled to 1000 px JPEG q0.82)"],
-        ["Title", "24 px semibold + Online / Offline badge; key count 18 px #666"],
-        ["Filter", "All Stock Types dropdown (New / Preowned …)"],
-        ["Row", "Key ID 16 px semibold · battery icon + % · last reported 12 px #8F8F8F; vehicle line 14 px #666 + condition colour"],
-        ["Battery", "≥ 20% green #126550, < 20% red #B10F2E"],
-        ["Hover card", "300 px, 8 px radius, beside the panel (left 476): key, room, status, Battery, Last reported, paired vehicle photo / VIN / price"],
-      ],
-    },
-    {
-      id: "vehicle",
-      title: "Vehicle details drawer",
-      rows: [
-        ["Container", "400 px wide, left 16 / top 76 / bottom 16, radius 6, z-40"],
-        ["Sections", "Photo gallery · title + price/miles · actions (Featured, Remark, Send Brochure, Share Location, More) · INFO / TRIPS"],
-        ["Location", "Lot row + one row per paired key (room, last update), each with a locate button"],
-        ["Info", "Basics (incl. every Key ID), Specifications, CARFAX, Safety ratings"],
-      ],
-    },
-    {
-      id: "tokens",
-      title: "Tokens & data",
-      rows: [
-        ["Inventory age", "0–45 days #00B397 · 46–90 #E6B117 · 90+ #E50C0C"],
-        ["Geofence", "#0B6494 fill at 30%, 2 px white stroke"],
-        ["Type", "Barlow (UI), Saira (brand headings)"],
-        ["Key ↔ vehicle", "key.vehicleId → vehicle.id; key.hubId → gateway; 1–2 keys per vehicle"],
-        ["Mocked in prototype", "Key battery %, last reported time, vehicle specs/CARFAX/safety (deterministic from ids)"],
+        {
+          id: "8100-3",
+          title: "Navigation & transition behavior",
+          status: "covered",
+          summary: "Side drawer over the current map context.",
+          design: [
+            "The Vehicle Detail drawer slides in on the left over the map; the Keys view and filters stay as they were.",
+            "The selected vehicle switches to its image card with its 1–2 key tags, and everything else dims to 50%.",
+            "Closing the drawer returns to the key context.",
+          ],
+          specs: [
+            ["Drawer", "400 px wide, left 16 / top 76 / bottom 16, radius 6, z-40"],
+            ["Drawer content", "Gallery · title + price/miles · actions · INFO / TRIPS · Location (lot + each key) · Basics (all Key IDs) · Specs · CARFAX · Safety"],
+            ["Camera", "Vehicle link: fitBounds(vehicle + keys). Key ID: flyTo(key)"],
+          ],
+        },
+        {
+          id: "8100-4",
+          title: "Empty / Unpaired state",
+          status: "partial",
+          summary: "“Unpaired key” in the row, “Not paired to a vehicle.” in the card, and no CTA.",
+          design: [
+            "A key with no vehicle reads “Unpaired key” where the vehicle line would be.",
+            "The detail card shows “Not paired to a vehicle.” instead of the vehicle block.",
+            "The vehicle link isn't rendered, so there's nothing to click into.",
+          ],
+          gap: "The demo data has no unpaired keys, so the state can't be seen live yet.",
+        },
+        {
+          id: "8100-5",
+          title: "Consistency with TWEB drawers & popovers",
+          status: "covered",
+          summary: "Key panel, vehicle drawer and map cards share one set of rules.",
+          design: [
+            "Key panel and vehicle drawer use the same placement, radius and shadow.",
+            "Map tooltips and the key detail card use the same card shell and type scale.",
+          ],
+          specs: [
+            ["Type", "Barlow (UI), Saira (brand)"],
+            ["Inventory age", "0–45 days #00B397 · 46–90 #E6B117 · 90+ #E50C0C"],
+            ["Key tag", "fill #17A5E6, 2 px border #336C8B, radius 4"],
+            ["Geofence", "#0B6494 fill at 30%, 2 px white stroke"],
+          ],
+        },
       ],
     },
   ];
 }
 
-const STATUS_LABEL: Record<Status, string> = { covered: "Covered", partial: "Partial", open: "Open" };
-
-function toMarkdown(list: Section[]) {
+function toMarkdown(list: Ticket[]) {
   return list
-    .map((sec) => {
-      const lines = [`## ${sec.ticket ? `[${sec.ticket.key}](${JIRA}${sec.ticket.key}) · ` : ""}${sec.title}`];
-      if (sec.ticket) lines.push("", `_${sec.ticket.title}_ — blocks ${sec.ticket.blocks}`);
-      if (sec.intro) lines.push("", sec.intro);
-      if (sec.criteria?.length) lines.push("", "| Requirement | Status | Prototype |", "|---|---|---|", ...sec.criteria.map((k) => `| ${k.req} | ${STATUS_LABEL[k.status]} | ${k.how} |`));
-      if (sec.rows.length) lines.push("", "| | |", "|---|---|", ...sec.rows.map(([a, b]) => `| ${a} | ${b} |`));
-      if (sec.notes) lines.push("", ...sec.notes.map((n) => `- ${n}`));
+    .map((t) => {
+      const lines = [`## [${t.key}](${JIRA}${t.key}) · ${t.title}`, "", `Blocks ${t.blocks}`, "", `**Objective:** ${t.objective}`];
+      if (t.decision) lines.push("", `**Design decision:** ${t.decision}`);
+      for (const ac of t.acs) {
+        lines.push("", `### ${ac.title} — ${STATUS_LABEL[ac.status]}`, "", ac.summary, "", ...ac.design.map((d) => `- ${d}`));
+        if (ac.specs?.length) lines.push("", "| Spec | Value |", "|---|---|", ...ac.specs.map(([a, b]) => `| ${a} | ${b} |`));
+        if (ac.gap) lines.push("", `> **Still open:** ${ac.gap}`);
+      }
       return lines.join("\n");
     })
     .join("\n\n");
 }
 
-export function HandoffPanel({ settings, zoom, version, onClose }: { settings: DisplaySettings; zoom: number; version: AppVersion; onClose: () => void }) {
-  const list = sections(settings, version);
-  const [open, setOpen] = useState<Set<string>>(() => new Set(["overlap", "keynav"]));
-  const [copied, setCopied] = useState(false);
-  const tier = zoom >= settings.imageFromZoom ? "Image cards" : zoom < settings.clusterBelowZoom ? "Clusters" : "Map pins";
+const countBy = (acs: AC[], st: Status) => acs.filter((a) => a.status === st).length;
 
-  const toggle = (id: string) =>
-    setOpen((o) => {
-      const n = new Set(o);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
+export function HandoffPanel({ settings, zoom, version, onClose }: { settings: DisplaySettings; zoom: number; version: AppVersion; onClose: () => void }) {
+  const list = tickets(settings, version);
+  const all = list.flatMap((t) => t.acs);
+  const [openTickets, setOpenTickets] = useState<Set<string>>(() => new Set([list[0].key]));
+  const [openACs, setOpenACs] = useState<Set<string>>(() => new Set());
+  const [copied, setCopied] = useState(false);
+
+  const flip = (set: Set<string>, id: string) => {
+    const n = new Set(set);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  };
 
   return (
     <aside
       aria-label="Engineering handoff"
       onKeyDown={(e) => e.key === "Escape" && onClose()}
-      className="absolute right-[72px] top-[76px] z-30 flex max-h-[calc(100%-290px)] min-h-[260px] w-[400px] flex-col overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white shadow-[0_12px_32px_rgba(0,0,0,.22)] animate-[pop-in_140ms_ease-out]"
+      className="absolute right-[72px] top-[76px] z-30 flex max-h-[calc(100%-290px)] min-h-[260px] w-[420px] flex-col overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white shadow-[0_12px_32px_rgba(0,0,0,.22)] animate-[pop-in_140ms_ease-out]"
     >
       <header className="flex shrink-0 items-start gap-2 border-b border-[#e8e8e8] px-4 pb-3 pt-3.5">
         <FileCode2 size={18} className="mt-0.5 shrink-0 text-brand" />
         <div className="min-w-0 flex-1">
           <h2 className="text-[16px] font-bold uppercase tracking-[1.4px] text-[#111]">Engineering handoff</h2>
-          <p className="mt-0.5 text-[13px] text-[#666]">How this prototype answers NG4-8068 & NG4-8100, plus build specs.</p>
+          <p className="mt-0.5 text-[13px] text-[#666]">How the prototype meets each acceptance criterion.</p>
         </div>
         <button
           type="button"
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(`# Asset map: engineering handoff (NG4-8068, NG4-8100)\n\n${toMarkdown(list)}\n`);
+              await navigator.clipboard.writeText(`# Asset map: engineering handoff\n\n${toMarkdown(list)}\n`);
               setCopied(true);
               setTimeout(() => setCopied(false), 1600);
             } catch {
@@ -247,7 +274,7 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
             }
           }}
           className="flex items-center gap-1 rounded-[4px] border border-[#dcdcdc] px-2 py-1 text-[12px] font-semibold text-[#333] hover:bg-[#f4f4f4]"
-          title="Copy all specs as Markdown"
+          title="Copy both tickets as Markdown"
         >
           {copied ? <Check size={14} className="text-brand" /> : <ClipboardCopy size={14} />}
           {copied ? "Copied" : "Copy"}
@@ -257,82 +284,122 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
         </button>
       </header>
 
-      {/* Ticket coverage at a glance, for PMs. */}
+      {/* Coverage at a glance, for PMs. */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[#e8e8e8] px-4 py-2 text-[12px] text-[#555]">
-        <span className="font-semibold text-[#111]">Ticket coverage</span>
-        {(["covered", "partial", "open"] as Status[]).map((st) => (
-          <span key={st} className="flex items-center gap-1">
-            <StatusChip status={st} />
-            {list.flatMap((x) => x.criteria ?? []).filter((k) => k.status === st).length}
-          </span>
-        ))}
+        <span className="font-semibold text-[#111]">{all.length} acceptance criteria</span>
+        {(["covered", "partial", "open"] as Status[]).map((st) =>
+          countBy(all, st) ? (
+            <span key={st} className="flex items-center gap-1">
+              <StatusChip status={st} />
+              {countBy(all, st)}
+            </span>
+          ) : null,
+        )}
       </div>
 
-      {/* Live: where the map is right now against the thresholds. */}
-      <div className="shrink-0 border-b border-[#e8e8e8] px-4 py-3">
-        <div className="flex items-center justify-between text-[12px]">
-          <span className="font-semibold text-[#111]">
-            Zoom <span className="tabular-nums">{zoom.toFixed(2)}</span>
-          </span>
-          <span className="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand">Showing: {tier}</span>
-        </div>
-        <TierBar settings={settings} zoom={zoom} />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {list.map((sec) => {
-          const isOpen = open.has(sec.id);
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] p-2.5">
+        {list.map((t) => {
+          const isOpen = openTickets.has(t.key);
+          const covered = countBy(t.acs, "covered");
           return (
-            <section key={sec.id} className="border-b border-[#eee] last:border-b-0">
-              <button type="button" onClick={() => toggle(sec.id)} aria-expanded={isOpen} className="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-[#f7f7f7]">
-                {sec.ticket && <span className="shrink-0 rounded-[4px] bg-[#e8f1fb] px-1.5 py-0.5 font-mono text-[11px] font-semibold text-[#0b5cad]">{sec.ticket.key}</span>}
-                <span className="flex-1 text-[14px] font-semibold text-[#111]">{sec.title}</span>
-                <ChevronDown size={16} className={`text-[#666] transition-transform ${isOpen ? "rotate-180" : ""}`} />
+            <section key={t.key} className="mb-2.5 overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white last:mb-0">
+              {/* Ticket accordion */}
+              <button
+                type="button"
+                onClick={() => setOpenTickets((o) => flip(o, t.key))}
+                aria-expanded={isOpen}
+                className={`flex w-full items-start gap-2.5 px-3.5 py-3 text-left hover:bg-[#fafafa] ${isOpen ? "border-b border-[#ececec]" : ""}`}
+              >
+                <span className="mt-0.5 shrink-0 rounded-[4px] bg-[#e8f1fb] px-1.5 py-0.5 font-mono text-[11.5px] font-bold text-[#0b5cad]">{t.key}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-semibold leading-snug text-[#111]">{t.title}</span>
+                  <span className="mt-1 block text-[12px] text-[#666]">
+                    {covered} of {t.acs.length} criteria covered
+                  </span>
+                </span>
+                <ChevronDown size={18} className={`mt-0.5 shrink-0 text-[#666] transition-transform ${isOpen ? "rotate-180" : ""}`} />
               </button>
+
               {isOpen && (
-                <div className="px-4 pb-3">
-                  {sec.ticket && (
-                    <p className="mb-2 text-[12px] leading-snug text-[#666]">
-                      <a href={JIRA + sec.ticket.key} target="_blank" rel="noreferrer" className="font-semibold text-[#0b5cad] hover:underline">
-                        {sec.ticket.key}
-                      </a>{" "}
-                      {sec.ticket.title} · blocks {sec.ticket.blocks}
+                <div className="px-3.5 pb-3 pt-2.5">
+                  <a href={JIRA + t.key} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#0b5cad] hover:underline">
+                    Open {t.key} in Jira <ExternalLink size={12} />
+                  </a>
+                  <span className="ml-1.5 text-[12px] text-[#888]">· blocks {t.blocks}</span>
+
+                  <p className="mt-2 text-[13px] leading-snug text-[#333]">
+                    <span className="font-semibold text-[#111]">Objective. </span>
+                    {t.objective}
+                  </p>
+                  {t.decision && (
+                    <p className="mt-2 rounded-[6px] border-l-[3px] border-brand bg-brand-50 px-2.5 py-2 text-[12.5px] leading-snug text-[#24403a]">
+                      <span className="font-semibold">Design decision. </span>
+                      {t.decision}
                     </p>
                   )}
-                  {sec.intro && <p className="mb-2 text-[13px] leading-snug text-[#555]">{sec.intro}</p>}
-                  {sec.criteria && (
-                    <ul className="mb-1 space-y-1.5">
-                      {sec.criteria.map((k) => (
-                        <li key={k.req} className="rounded-[6px] border border-[#ececec] px-2.5 py-2">
-                          <div className="flex items-start gap-2">
-                            <span className="flex-1 text-[12.5px] font-semibold leading-snug text-[#111]">{k.req}</span>
-                            <StatusChip status={k.status} />
-                          </div>
-                          <p className="mt-1 text-[12px] leading-snug text-[#444]">{k.how}</p>
+
+                  <h3 className="mb-1.5 mt-3 text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">Acceptance criteria</h3>
+                  <ol className="space-y-1.5">
+                    {t.acs.map((ac, n) => {
+                      const acOpen = openACs.has(ac.id);
+                      return (
+                        <li key={ac.id} className="rounded-[6px] border border-[#e6e6e6]">
+                          <button type="button" onClick={() => setOpenACs((o) => flip(o, ac.id))} aria-expanded={acOpen} className="flex w-full items-start gap-2 px-2.5 py-2 text-left hover:bg-[#fafafa]">
+                            <span className="mt-px shrink-0 font-mono text-[11px] font-semibold text-[#8f8f8f]">AC{n + 1}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[13px] font-semibold leading-snug text-[#111]">{ac.title}</span>
+                              <span className="mt-0.5 block text-[12px] leading-snug text-[#555]">{ac.summary}</span>
+                            </span>
+                            <StatusChip status={ac.status} />
+                            <ChevronDown size={14} className={`mt-0.5 shrink-0 text-[#888] transition-transform ${acOpen ? "rotate-180" : ""}`} />
+                          </button>
+
+                          {acOpen && (
+                            <div className="border-t border-[#f0f0f0] px-2.5 pb-2.5 pt-2">
+                              <p className="text-[11px] font-bold uppercase tracking-[1.1px] text-[#8f8f8f]">How we designed it</p>
+                              <ul className="mt-1 list-disc space-y-1 pl-4 text-[12.5px] leading-snug text-[#222] marker:text-[#bbb]">
+                                {ac.design.map((d) => (
+                                  <li key={d}>{d}</li>
+                                ))}
+                              </ul>
+
+                              {ac.live === "zoom" && <LiveZoom settings={settings} zoom={zoom} />}
+
+                              {ac.specs && (
+                                <>
+                                  <p className="mt-2.5 text-[11px] font-bold uppercase tracking-[1.1px] text-[#8f8f8f]">Specs</p>
+                                  <dl className="mt-1 divide-y divide-[#f0f0f0] rounded-[6px] border border-[#ececec]">
+                                    {ac.specs.map(([a, b]) => (
+                                      <div key={a} className="grid grid-cols-[118px_1fr] gap-2 px-2 py-1.5">
+                                        <dt className="font-mono text-[11px] leading-snug text-[#0B6494]">{a}</dt>
+                                        <dd className="text-[12px] leading-snug text-[#222]">{b}</dd>
+                                      </div>
+                                    ))}
+                                  </dl>
+                                </>
+                              )}
+
+                              {ac.gap && (
+                                <p className={`mt-2.5 rounded-[6px] px-2.5 py-2 text-[12px] leading-snug ${ac.status === "open" ? "bg-[#fde8e8] text-[#7a1020]" : "bg-[#fdf6e0] text-[#6b5205]"}`}>
+                                  <span className="font-semibold">Still open. </span>
+                                  {ac.gap}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </li>
-                      ))}
-                    </ul>
-                  )}
-                  {sec.rows.length > 0 && (
-                  <dl className="divide-y divide-[#f0f0f0] rounded-[6px] border border-[#ececec]">
-                    {sec.rows.map(([a, b]) => (
-                      <div key={a} className="grid grid-cols-[132px_1fr] gap-2 px-2.5 py-1.5">
-                        <dt className="font-mono text-[11.5px] leading-snug text-[#0B6494]">{a}</dt>
-                        <dd className="text-[12.5px] leading-snug text-[#222]">{b}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                  )}
-                  {sec.notes?.map((n) => (
-                    <p key={n} className="mt-2 text-[12px] text-[#666]">
-                      {n}
-                    </p>
-                  ))}
+                      );
+                    })}
+                  </ol>
                 </div>
               )}
             </section>
           );
         })}
+
+        <p className="mt-2.5 px-1 text-[11.5px] leading-snug text-[#888]">
+          Prototype notes: key battery %, last reported time and vehicle specs / CARFAX / safety are mocked (deterministic from ids). Switch V1 / V2 at the bottom of the nav rail.
+        </p>
       </div>
     </aside>
   );
@@ -340,10 +407,26 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
 
 function StatusChip({ status }: { status: Status }) {
   const cls = status === "covered" ? "bg-[#e3f5ef] text-[#126550]" : status === "partial" ? "bg-[#fbefc9] text-[#8a6a06]" : "bg-[#fde8e8] text-[#B10F2E]";
-  return <span className={`shrink-0 rounded-full px-1.5 py-px text-[10.5px] font-bold uppercase tracking-[0.6px] ${cls}`}>{STATUS_LABEL[status]}</span>;
+  return <span className={`mt-px shrink-0 rounded-full px-1.5 py-px text-[10.5px] font-bold uppercase tracking-[0.6px] ${cls}`}>{STATUS_LABEL[status]}</span>;
 }
 
-/** Zoom 15–21 strip with the three tiers and a live marker for the current zoom. */
+/** Live readout inside the zoom criterion: current zoom against the tier thresholds. */
+function LiveZoom({ settings, zoom }: { settings: DisplaySettings; zoom: number }) {
+  const tier = zoom >= settings.imageFromZoom ? "Image cards" : zoom < settings.clusterBelowZoom ? "Clusters" : "Map pins";
+  return (
+    <div className="mt-2.5 rounded-[6px] border border-[#ececec] px-2.5 py-2">
+      <div className="flex items-center justify-between text-[12px]">
+        <span className="font-semibold text-[#111]">
+          Live · zoom <span className="tabular-nums">{zoom.toFixed(2)}</span>
+        </span>
+        <span className="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand">Showing: {tier}</span>
+      </div>
+      <TierBar settings={settings} zoom={zoom} />
+    </div>
+  );
+}
+
+/** Zoom 15–21 strip with the three tiers and a marker for the current zoom. */
 function TierBar({ settings, zoom }: { settings: DisplaySettings; zoom: number }) {
   const lo = 15;
   const hi = 21;
@@ -351,7 +434,7 @@ function TierBar({ settings, zoom }: { settings: DisplaySettings; zoom: number }
   const c = settings.clusterBelowZoom;
   const i = settings.imageFromZoom;
   return (
-    <div className="mt-2.5">
+    <div className="mt-2">
       <div className="relative h-6 overflow-visible rounded-[4px] text-[10.5px] font-semibold">
         <div className="absolute inset-y-0 left-0 flex items-center justify-center rounded-l-[4px] bg-[#e3f1ec] text-[#126550]" style={{ width: pct(c) }}>
           Clusters

@@ -5,6 +5,7 @@ import { FIGMA, TYPE_BY_ID, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog
 import type { Asset, InventoryAge } from "@/lib/types";
 import { BatteryFull, BatteryLow, BatteryMedium } from "lucide-react";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
+import { useVersion } from "./version";
 
 /*
  * Map asset anatomy from Figma "Inventory Management" → Map Assets (15099:114724).
@@ -172,6 +173,9 @@ export function AssetPreview({ asset }: { asset: Asset }) {
 
 /** Key tag battery level: icon + percentage, red when low. */
 export function KeyBattery({ pct, className = "" }: { pct: number; className?: string }) {
+  // V1 has no key tag battery anywhere.
+  const version = useVersion();
+  if (version === "v1") return null;
   const Icon = pct < 20 ? BatteryLow : pct < 60 ? BatteryMedium : BatteryFull;
   const low = pct < 20;
   return (

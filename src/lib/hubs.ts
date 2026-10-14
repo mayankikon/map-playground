@@ -13,15 +13,17 @@ export interface KeyHub {
   image?: string;
   /** Hardware id of the gateway in the room (what V1 shows instead of the room name). */
   gatewayId: string;
+  /** Floor of the building the room is on (V2 room details). */
+  floor: string;
 }
 
 /** Key locations inside the Toyota of Grapevine building. */
 export const KEY_HUBS: KeyHub[] = [
-  { id: "hub-key-room", name: "Key Room", position: [-97.06905, 32.9247], online: true, icon: "cabinet", image: "/rooms/key-room.jpg", gatewayId: "GW-40121" },
-  { id: "hub-showroom", name: "Showroom", position: [-97.0693, 32.9249], online: true, icon: "showroom", image: "/rooms/showroom.jpg", gatewayId: "GW-40122" },
-  { id: "hub-parts", name: "Parts Department", position: [-97.0688, 32.925], online: true, icon: "parts", image: "/rooms/parts.jpg", gatewayId: "GW-40123" },
-  { id: "hub-sales-tower", name: "Sales Tower", position: [-97.06948, 32.92455], online: false, icon: "tower", image: "/rooms/sales-tower.jpg", gatewayId: "GW-40124" },
-  { id: "hub-gm-office", name: "GM's Office", position: [-97.0693, 32.92471], online: true, icon: "office", image: "/rooms/gm-office.jpg", gatewayId: "GW-40125" },
+  { id: "hub-key-room", name: "Key Room", position: [-97.06905, 32.9247], online: true, icon: "cabinet", image: "/rooms/key-room.jpg", gatewayId: "GW-40121", floor: "Floor 1" },
+  { id: "hub-showroom", name: "Showroom", position: [-97.0693, 32.9249], online: true, icon: "showroom", image: "/rooms/showroom.jpg", gatewayId: "GW-40122", floor: "Floor 1" },
+  { id: "hub-parts", name: "Parts Department", position: [-97.0688, 32.925], online: true, icon: "parts", image: "/rooms/parts.jpg", gatewayId: "GW-40123", floor: "Floor 1" },
+  { id: "hub-sales-tower", name: "Sales Tower", position: [-97.06948, 32.92455], online: false, icon: "tower", image: "/rooms/sales-tower.jpg", gatewayId: "GW-40124", floor: "Floor 2" },
+  { id: "hub-gm-office", name: "GM's Office", position: [-97.0693, 32.92471], online: true, icon: "office", image: "/rooms/gm-office.jpg", gatewayId: "GW-40125", floor: "Floor 2" },
 ];
 
 /** Keys that are not in a hub are grouped by where they are. */
