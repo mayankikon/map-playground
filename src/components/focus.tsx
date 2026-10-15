@@ -170,14 +170,14 @@ export function RoomKeysOverlay({
     <div className="pointer-events-none absolute inset-0 z-[6] overflow-hidden" aria-label={`${keys.length} keys in this room`}>
       <div ref={ref} className="absolute left-0 top-0 h-0 w-0">
         {/* Hovering a tag (or its row in the panel) fades the other tags to 50%. */}
-        <div className="absolute left-0 top-0 [&:has(button:hover)_button:not(:hover)]:opacity-50">
+        <div className="absolute left-0 top-0 [&:has(button:hover)_button:not(:hover)]:opacity-[.65] [&:has(button:hover)_button:not(:hover)]:saturate-[.9]">
           {keys.map((k, i) => (
             <div key={k.id} className="absolute size-0" style={{ left: spots[i].x, top: spots[i].y }}>
               <button
                 type="button"
                 onClick={() => onOpenKey(k.id)}
                 aria-label={`Open the vehicle for ${k.code ? `key ${k.code}` : "this key"}`}
-                className={`group pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-[pop-in_160ms_ease-out_both] transition-opacity duration-150 hover:z-10 ${highlightId === k.id ? "z-10" : highlightId ? "opacity-50" : ""}`}
+                className={`group pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-[pop-in_160ms_ease-out_both] transition-opacity duration-150 hover:z-10 ${highlightId === k.id ? "z-10" : highlightId ? "opacity-[.65] saturate-[.9]" : ""}`}
               >
                 <span className="block scale-[0.85]">
                   <KeyMarker active={highlightId === k.id} />
@@ -225,7 +225,7 @@ export function GroupKeysOverlay({
   }, [map, keys]);
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-[6] overflow-hidden [&:has(button:hover)_button:not(:hover)]:opacity-50" aria-label={`${keys.length} keys in this bucket`}>
+    <div className="pointer-events-none absolute inset-0 z-[6] overflow-hidden [&:has(button:hover)_button:not(:hover)]:opacity-[.65] [&:has(button:hover)_button:not(:hover)]:saturate-[.9]" aria-label={`${keys.length} keys in this bucket`}>
       {keys.map((k, i) => (
         <div
           key={k.id}
@@ -238,7 +238,7 @@ export function GroupKeysOverlay({
             type="button"
             onClick={() => onOpenKey(k.id)}
             aria-label={`Open the vehicle for ${k.code ? `key ${k.code}` : "this key"}`}
-            className={`group pointer-events-auto absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 animate-[pop-in_160ms_ease-out_both] transition-opacity duration-150 hover:z-10 ${highlightId === k.id ? "z-10" : highlightId ? "opacity-50" : ""}`}
+            className={`group pointer-events-auto absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 animate-[pop-in_160ms_ease-out_both] transition-opacity duration-150 hover:z-10 ${highlightId === k.id ? "z-10" : highlightId ? "opacity-[.65] saturate-[.9]" : ""}`}
           >
             <KeyMarker active={highlightId === k.id} />
             <span className="pointer-events-none absolute bottom-[calc(100%-2px)] left-1/2 hidden -translate-x-1/2 group-hover:block">

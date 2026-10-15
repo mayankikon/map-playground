@@ -2,7 +2,9 @@ export type LngLat = [number, number];
 
 export type AssetKind = "vehicle" | "key" | "device";
 export type InventoryAge = "new" | "mid" | "old";
-export type Condition = "New" | "Preowned";
+/** Stock types a vehicle can be listed under. */
+export const STOCK_TYPES = ["New", "Preowned", "Loaner", "Demo", "Service", "BVA"] as const;
+export type Condition = (typeof STOCK_TYPES)[number];
 
 export interface AssetType {
   id: string;

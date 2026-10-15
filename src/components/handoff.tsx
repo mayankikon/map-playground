@@ -44,6 +44,159 @@ interface Ticket {
 }
 
 const JIRA = "https://ikongps.atlassian.net/browse/";
+const PROTOTYPE_URL = "https://map-playground-six.vercel.app";
+const REPO_URL = "https://github.com/mayankikon/map-playground";
+
+/** Changes in this build that sit outside the two tickets' acceptance criteria. */
+interface Change {
+  title: string;
+  detail: string;
+  specs?: Row[];
+}
+
+/** Every map / key element and its states, with the values to build it. */
+const COMPONENTS: Change[] = [
+  {
+    title: "Key tag (map)",
+    detail: "Figma “Key Marker”: blue tag with a key glyph. Used for a vehicle's paired keys, keys scattered round an open gateway, and In Lot / Off Lot keys.",
+    specs: [
+      ["Size", "48 px frame, 32 px tag; 85% (27 px tag) when scattered round a gateway"],
+      ["Default", "fill #17A5E6, 2 px border #336C8B, radius 4, shadow 0 4 4 rgba(0,0,0,.25), inset 0 0 12 rgba(0,0,0,.15)"],
+      ["Hover", "halo #336C8B at 40% (radius 14) + key tooltip above; other tags dim"],
+      ["Active", "same halo, kept on: hovered row in the key panel, or the key picked from search"],
+      ["Dimmed", "opacity 0.65 + saturate(0.9)"],
+      ["Click", "opens the paired vehicle (drawer, Vehicles tab, map centred on the key); unpaired = no action"],
+    ],
+  },
+  {
+    title: "Key tooltip (map hover)",
+    detail: "Card above the hovered key tag.",
+    specs: [
+      ["Content", "Key ID (+ battery in V2) · paired vehicle Year Make Model (14 px semibold) · VIN · Last reported · “Click to open vehicle” (#007CBE)"],
+      ["Unpaired", "“Not paired to a vehicle”, no CTA"],
+      ["Shell", "white card, radius 8, shadow; caret centred under the card, no divider"],
+    ],
+  },
+  {
+    title: "Gateway (key room) marker",
+    detail: "One marker per key room, from zoom 16 in the Keys view; stands in for every key stored there.",
+    specs: [
+      ["Size", "40 px white tile, radius 8, shadow 0 4 4 rgba(0,0,0,.25), Radio icon 20 px"],
+      ["Online / offline", "border + icon #1A9375 / #99A3AD"],
+      ["Hover / focus", "halo #1A9375 at 35% (inset −5 px, radius 12) + card: room name, Online badge, floor (V2), “N Keys Reporting”"],
+      ["Selected (panel open)", "halo #1A9375 at 45%, kept on"],
+      ["Click", "opens the key panel, flies to zoom ≥ 18.6 (+233 px x), scatters its key tags, dims the map"],
+    ],
+  },
+  {
+    title: "Key panel row",
+    detail: "One row per key in the open gateway / bucket.",
+    specs: [
+      ["Content", "Key ID 16 px semibold · battery (V2) · last reported 12 px #8F8F8F right · vehicle line 14 px #666 + stock type colour · chevron"],
+      ["Default / hover / selected", "#FFFFFF / #F4F4F4 / #E5E5E5"],
+      ["Hover", "opens the Key Details card beside the panel; its map tag goes active, others dim"],
+      ["Click", "whole row = Key ID: paired vehicle drawer, map centred on the key; vehicle line = vehicle framed with its keys"],
+    ],
+  },
+  {
+    title: "Key Details card (row hover)",
+    detail: "300 px card at left 476 px, top aligned to the hovered row.",
+    specs: [
+      ["V2", "Key ID · room · floor · Online badge │ Battery · Last reported │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price)"],
+      ["V1", "Key ID · room · Online badge │ Paired vehicle (no battery / last reported block)"],
+      ["Unpaired", "“Not paired to a vehicle.”"],
+    ],
+  },
+  {
+    title: "Key panel header",
+    detail: "Top of the 450 px key panel.",
+    specs: [
+      ["V2", "4:3 room photo with pencil (upload, top-left) and ✕ (top-right); name 24 px semibold + Online badge; “N keys · Floor N” 18 px"],
+      ["V1", "no photo or pencil; name + badge + ✕ in one row; “N keys”"],
+      ["Filter", "All Stock Types · New · Preowned · Loaner · Demo · Service · BVA"],
+    ],
+  },
+  {
+    title: "Cluster bubble",
+    detail: "Count of vehicles (see NG4-8068 AC3 for when one forms).",
+    specs: [
+      ["Default", "white fill, 1.5 px stroke #DCDCDC, shadow (black 22%, blur .5, y +4); count DIN Pro Bold 15"],
+      ["Size", "radius 15 px (< 100), 18 px (100–999), 22 px (≥ 1000)"],
+      ["Hover", "fill #F1FFFA, stroke #99A3AD, ring #48A991 at 40% (radius + 10)"],
+      ["Dimmed", "opacity 0.65, shadow 0.143"],
+      ["Click", "zooms in until the vehicles separate into pins"],
+    ],
+  },
+  {
+    title: "Vehicle pin",
+    detail: "Figma map-marker pin, coloured by inventory age; zoom 18.6–19.2.",
+    specs: [
+      ["Default", "pin icon: 0–45 #00B397 · 46–90 #E6B117 · 90+ #E50C0C"],
+      ["Hover / selected", "pin-hover icon variant + tooltip (Year Make Model, VIN • stock, stock type • price • miles)"],
+      ["Dimmed", "icon-opacity 0.65 and the “-dim” icon copy (saturation 0.9)"],
+    ],
+  },
+  {
+    title: "Vehicle image card",
+    detail: "Photo marker from zoom 19.2, and the selected vehicle at any zoom.",
+    specs: [
+      ["Size", "74 × 44 shield, photo 54 × 28 radius 3, drop shadow 0 4 2 rgba(0,0,0,.25), anchored bottom-centre"],
+      ["Hover / selected", "shield-hover variant + tooltip"],
+      ["Non-reporting", "tag badge top-right"],
+      ["Dimmed", "marker filter saturate(0.9); card opacity 0.65"],
+    ],
+  },
+  {
+    title: "Search",
+    detail: "Top-bar typeahead.",
+    specs: [
+      ["Idle / focused", "360 px, #F4F4F4 fill, #DCDCDC border / white fill, #1A9375 border; ✕ appears with text"],
+      ["Results", "Vehicles (photo, name, VIN) then Keys (icon, Key ID); up to 6 each; matched text semibold"],
+      ["Hover / keyboard active", "#F2F2F2; ↑ ↓ Enter Esc"],
+      ["No results", "“No vehicles or keys match “…”.”"],
+    ],
+  },
+  {
+    title: "Collapsed list button",
+    detail: "Left edge of the map when the list panel is collapsed.",
+    specs: [
+      ["Content", "“Show N vehicles & N keys” 14 px semibold + » icon; counts follow the map filters"],
+      ["Hover", "#F4F4F4"],
+    ],
+  },
+];
+
+const CHANGES: Change[] = [
+  {
+    title: "Search vehicles and keys (relates to NG4-6631)",
+    detail: "Top-bar typeahead. Vehicles match on Year Make Model and VIN; keys match on Key ID. Every typed word must match; matched text is semibold. Results grouped Vehicles / Keys (6 each), neutral grey hover. Picking a vehicle opens its drawer (Vehicles tab) framed with its keys; picking a key opens its room / bucket, keeps that tag at full strength (others dimmed) and scrolls its row into view. ↑ ↓ Enter Esc.",
+    specs: [
+      ["Box", "360 px, placeholder “Search vehicle, VIN or Key ID”, clear (✕) button"],
+      ["Results", "420 px dropdown; vehicle row = photo + name + VIN; key row = key icon + Key ID only; no counts"],
+      ["Hover / active", "#F2F2F2"],
+    ],
+  },
+  {
+    title: "Stock types",
+    detail: "Vehicles can be New, Preowned, Loaner, Demo, Service or BVA. Every stock type control (map Stock Type filter, key panel filter, edit form) lists all six; each type has its own text colour.",
+  },
+  {
+    title: "Collapsed list button shows totals",
+    detail: "With the list panel collapsed, the expand button reads “Show N vehicles & N keys” left of the » chevron. Counts honour the active map filters and ignore the current tab.",
+  },
+  {
+    title: "Map always fills its area",
+    detail: "The map canvas resizes whenever its container changes (ResizeObserver on the container, plus an explicit resize when the list panel opens or closes), so collapsing the list never leaves a blank strip.",
+  },
+  {
+    title: "Vehicle / key toggle removed from the map",
+    detail: "The VEHICLES / KEYS tabs in the list panel are the only view switch. Leaving Keys closes the open key panel.",
+  },
+  {
+    title: "V1 vs V2 (prototype versions)",
+    detail: "V2 is the target. V1 keeps real room names but drops room photos, the photo edit icon, floor level and key battery; its key hover card has no Battery / Last reported block.",
+  },
+];
 
 function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
   const c = s.clusterBelowZoom;
@@ -155,16 +308,18 @@ for (g of groups)
           summary: "Hover, selected and expanded/collapsed are built; keyboard focus is not.",
           design: [
             "Hover: tooltip card above the marker plus a soft halo; still works on dimmed markers.",
-            "Selected: the vehicle always renders as its image card (any zoom) with its 1–2 key tags; everything else drops to 50%.",
-            "Expanded / collapsed: a gateway opens into its key panel + tags and closes with ✕ or Esc. Hovering a key fades the other tags to 50%.",
+            "Selected: the vehicle always renders as its image card (any zoom) with its 1–2 key tags; everything else is dimmed to 65% opacity and 90% saturation.",
+            "Expanded / collapsed: a gateway opens into its key panel + tags and closes with ✕ or Esc. Hovering a key dims the other tags the same way.",
           ],
           specs: [
             ["Selected camera", "fitBounds(vehicle + keys), padding T150 B60 L460 R90, maxZoom 19.5"],
-            ["asset-pins", "icon-opacity 1 → 0.5"],
-            ["clusters", "circle-opacity, circle-stroke-opacity 1 → 0.5"],
-            ["cluster-count", "text-opacity 1 → 0.5"],
-            ["cluster-shadow", "circle-opacity 0.22 → 0.11"],
-            ["Image cards", "opacity 0.5 on the card inside the marker (.is-dim > *); Mapbox sets inline opacity on the marker element"],
+            ["Dimmed state", "opacity 0.65 + saturation 0.9 (10% less) on everything but the focus"],
+            ["asset-pins", "icon-opacity 1 → 0.65; icon-image swaps to “-dim” copies desaturated to 0.9 (symbols have no saturation paint)"],
+            ["clusters", "circle-opacity, circle-stroke-opacity 1 → 0.65 (bubbles are neutral, no saturation change needed)"],
+            ["cluster-count", "text-opacity 1 → 0.65"],
+            ["cluster-shadow", "circle-opacity 0.22 → 0.143"],
+            ["Image cards", "filter saturate(0.9) on the marker element; opacity 0.65 on the card inside it (Mapbox writes inline opacity on the marker element)"],
+            ["Key tags", "opacity 0.65 + saturate(0.9) on non-focused tags"],
           ],
           gap: "Keyboard focus ring for pins and key tags isn't defined yet (gateways have one).",
         },
@@ -180,19 +335,22 @@ for (g of groups)
         {
           id: "8100-1",
           title: "Key Detail Card / Popup: paired vehicle summary",
-          status: "partial",
-          summary: "Key panel rows and the key detail card show the vehicle; the map key tooltip doesn't yet.",
+          status: "covered",
+          summary: "Key panel rows, the key detail card and the map key tooltip all show the paired vehicle.",
           design: [
-            "Each row in the key panel shows the Key ID with the vehicle's Year Make Model and condition underneath.",
+            "Each row in the key panel shows the Key ID with the vehicle's Year Make Model and stock type underneath.",
+            "The panel's stock type filter always offers every type: All Stock Types, New, Preowned, Loaner, Demo, Service, BVA.",
+            "Hovering any key tag on the map shows a tooltip: Key ID (+ battery in V2), paired vehicle Year Make Model and VIN, last reported, and “Click to open vehicle”.",
             `Hovering a row opens the Key Details card: ${version === "v1" ? "key, room, status" : "key, room · floor, status, battery, last reported"}, then the paired vehicle's photo, VIN • stock and condition • price.`,
           ],
           specs: [
             ["Key panel", "450 px wide, left 16 / top 76 / bottom 16, radius 6, shadow 0 8 28 rgba(0,0,0,.28)"],
             ["Row", "Key ID 16 px semibold; vehicle line 14 px #666 + condition colour; last reported 12 px #8F8F8F"],
             ["Detail card", "300 px, radius 8, beside the panel (left 476 px), aligned to the hovered row"],
+            ["Header photo (V2)", "4:3, same as the vehicle drawer gallery (400 × 300); pencil top-left to replace it"],
+            ["Stock type colour", "New #1A9375 · Preowned #E64B17 · Loaner #6B4FBB · Demo #0B6494 · Service #A86A00 · BVA #5B6770"],
             ["Version", version === "v1" ? "V1 (showing): room names, no photos or floor level, no battery; hover card drops battery & last reported" : "V2 (showing): room · floor level, battery ≥20% green / <20% red; V1 drops both"],
           ],
-          gap: "The tooltip on a key tag on the map shows Key ID, last reported and address, but no vehicle. Add a Year Make Model + VIN line.",
         },
         {
           id: "8100-2",
@@ -201,11 +359,12 @@ for (g of groups)
           summary: "The vehicle title is the link; Key IDs and key tags are links too.",
           design: [
             "Vehicle line in a key row: opens the vehicle's details and frames it with its keys.",
-            "Key ID (row or hover): opens the paired vehicle's details but centres the map on that key, for when you're walking to the key.",
-            "Clicking a key tag on the map opens its vehicle.",
+            "Key ID, or anywhere else on the key row: opens the paired vehicle's details and centres the map on that key, for when you're walking to the key.",
+            "Clicking any key on the map (room tag, In Lot / Off Lot tag, or a loose key pin) opens its paired vehicle. Keys never open an edit card; an unpaired key does nothing on click.",
           ],
           specs: [
             ["Link style", "Hover underline; Key ID hover colour #007CBE"],
+            ["Click targets", "Whole key row = Key ID action; vehicle line = vehicle action (stops propagation); chevron = Key ID action"],
           ],
         },
         {
@@ -215,13 +374,13 @@ for (g of groups)
           summary: "Back to the Vehicles list, vehicle details drawer open, same map.",
           design: [
             "The key panel closes, the list switches from Keys to Vehicles, and the Vehicle Detail drawer opens on the left over the map. Filters stay as they were.",
-            "The selected vehicle switches to its image card with its 1–2 key tags, and everything else dims to 50%.",
+            "The selected vehicle switches to its image card with its 1–2 key tags, and everything else dims to 65% opacity / 90% saturation.",
             "Closing the drawer leaves you in the Vehicles view; the Keys tab reopens the gateway list.",
           ],
           specs: [
             ["Drawer", "400 px wide, left 16 / top 76 / bottom 16, radius 6, z-40"],
             ["Drawer content", "Gallery · title + price/miles · actions · INFO / TRIPS · Location (lot + each key) · Basics (all Key IDs) · Specs · CARFAX · Safety"],
-            ["Camera", "Vehicle link: fitBounds(vehicle + keys). Key ID: flyTo(key)"],
+            ["Camera", "Vehicle link: fitBounds(vehicle + keys). Key ID: flyTo(key, zoom ≥ 19.1) with offset +208 px x, so the key tag sits in the centre of the map area right of the 416 px drawer (no offset on maps < 640 px)"],
           ],
         },
         {
@@ -255,6 +414,54 @@ for (g of groups)
       ],
     },
   ];
+}
+
+/**
+ * Self-contained build prompt for a coding agent working in the production codebase: carries
+ * the product context, the reference prototype, how to apply the changes, every spec and an
+ * acceptance checklist, so pasting it is enough to bring prod in line with this prototype.
+ */
+function toBuildPrompt(list: Ticket[], version: AppVersion) {
+  const approved = list.flatMap((t) => t.acs.filter((a) => a.status === "covered").map((a) => `- [ ] ${t.key} · ${a.title}: ${a.summary}`));
+  const open = list.flatMap((t) => t.acs.filter((a) => a.gap).map((a) => `- ${t.key} · ${a.title}: ${a.gap}`));
+  return [
+    "# Build prompt: TWEB asset map — NG4-8068 & NG4-8100",
+    "",
+    "## Role and goal",
+    "You are a senior engineer working in the production Toolbox Web (TWEB) codebase. Bring production in line with the approved map prototype described below: implement every change, run the app, verify each checklist item, then open a pull request titled “NG4-8068 / NG4-8100: map overlap + key → vehicle navigation” that links both tickets.",
+    "",
+    "## Context",
+    "- Product: TWEB lot-management map (Mapbox GL) showing vehicles, key tags, gateways (key rooms) and geofences, with a vehicle list / keys panel on the left and a vehicle details drawer.",
+    `- Tickets: ${JIRA}NG4-8068 (pin overlap) and ${JIRA}NG4-8100 (key → paired vehicle navigation).`,
+    `- Approved prototype, the source of truth for behaviour and visuals: ${PROTOTYPE_URL}`,
+    `- Prototype source (reference only): ${REPO_URL}`,
+    `- Target version: V2${version === "v1" ? " (the prototype is currently showing V1; still build V2 unless the PM says otherwise)" : ""}.`,
+    "- Mocked in the prototype, wire to real data: key battery %, key last-reported time, room floor level, vehicle specs / CARFAX / safety.",
+    "",
+    "## How to apply",
+    "1. Find the existing production implementations first (map view and cluster source, vehicle list / keys panel, vehicle details drawer, search). Extend them; don't fork parallel components.",
+    "2. Use the exact values in the specs. Where production already has a design token for the same value, use the token.",
+    "3. Implement with production components, data/API layer and routing; never copy prototype mock data or demo seeding.",
+    "4. Leave behaviour not mentioned here unchanged.",
+    "5. Items under “Not approved yet” are out of scope: don't build them; list them in the PR description as follow-ups.",
+    "6. When done, walk through the acceptance checklist in the running app and tick each item in the PR description.",
+    "",
+    "## Components & states",
+    ...COMPONENTS.flatMap((c) => [`### ${c.title}`, c.detail, ...(c.specs ?? []).map(([a, b]) => `- ${a}: ${b}`), ""]),
+    "## Also in this build",
+    ...CHANGES.flatMap((c) => [`### ${c.title}`, c.detail, ...(c.specs ?? []).map(([a, b]) => `- ${a}: ${b}`), ""]),
+    "## Ticket specs",
+    "",
+    toMarkdown(list),
+    "",
+    "## Acceptance checklist",
+    ...approved,
+    ...CHANGES.map((c) => `- [ ] ${c.title}`),
+    "",
+    "## Not approved yet (do not build)",
+    ...(open.length ? open : ["- None"]),
+    "",
+  ].join("\n");
 }
 
 function toMarkdown(list: Ticket[]) {
@@ -308,7 +515,7 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
           type="button"
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(`# Asset map: engineering handoff\n\n${toMarkdown(list)}\n`);
+              await navigator.clipboard.writeText(toBuildPrompt(list, version));
               setCopied(true);
               setTimeout(() => setCopied(false), 1600);
             } catch {
@@ -316,10 +523,10 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
             }
           }}
           className="flex items-center gap-1 rounded-[4px] border border-[#dcdcdc] px-2 py-1 text-[12px] font-semibold text-[#333] hover:bg-[#f4f4f4]"
-          title="Copy both tickets as Markdown"
+          title="Copy a build prompt for a coding agent in the production repo: context, specs, how to apply, acceptance checklist"
         >
           {copied ? <Check size={14} className="text-brand" /> : <ClipboardCopy size={14} />}
-          {copied ? "Copied" : "Copy"}
+          {copied ? "Copied" : "Copy build prompt"}
         </button>
         <button type="button" onClick={onClose} aria-label="Dismiss handoff panel" className="grid size-7 place-items-center rounded-full text-[#666] hover:bg-[#eee] hover:text-[#111]">
           <X size={16} strokeWidth={2.5} />
@@ -424,6 +631,9 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
           );
         })}
 
+        <ItemsSection title="Components & states" subtitle={`${COMPONENTS.length} map and key elements, every state with its values`} items={COMPONENTS} />
+        <AlsoInBuild />
+
         <p className="mt-2.5 px-1 text-[11.5px] leading-snug text-[#888]">
           Prototype notes: key battery %, last reported time and vehicle specs / CARFAX / safety are mocked (deterministic from ids). Switch V1 / V2 at the bottom of the nav rail.
         </p>
@@ -472,6 +682,46 @@ function DeepDive({ title, steps, bands, examples, code }: NonNullable<AC["deepD
         </>
       )}
     </div>
+  );
+}
+
+/** Changes outside the tickets' criteria, collapsed by default. */
+function AlsoInBuild() {
+  return <ItemsSection title="Also in this build" subtitle={`${CHANGES.length} changes outside the tickets' criteria`} items={CHANGES} />;
+}
+
+function ItemsSection({ title, subtitle, items }: { title: string; subtitle: string; items: Change[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="mt-2.5 overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className={`flex w-full items-start gap-2.5 px-3.5 py-3 text-left hover:bg-[#fafafa] ${open ? "border-b border-[#ececec]" : ""}`}>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold leading-snug text-[#111]">{title}</span>
+          <span className="mt-1 block text-[12px] text-[#666]">{subtitle}</span>
+        </span>
+        <ChevronDown size={18} className={`mt-0.5 shrink-0 text-[#666] transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <ul className="space-y-2 px-3.5 pb-3 pt-2.5">
+          {items.map((c) => (
+            <li key={c.title} className="rounded-[6px] border border-[#e6e6e6] px-2.5 py-2">
+              <p className="text-[13px] font-semibold text-[#111]">{c.title}</p>
+              <p className="mt-0.5 text-[12px] leading-snug text-[#444]">{c.detail}</p>
+              {c.specs && (
+                <dl className="mt-1.5 divide-y divide-[#f0f0f0] rounded-[6px] border border-[#ececec]">
+                  {c.specs.map(([a, b]) => (
+                    <div key={a} className="grid grid-cols-[96px_1fr] gap-2 px-2 py-1.5">
+                      <dt className="font-mono text-[11px] leading-snug text-[#0B6494]">{a}</dt>
+                      <dd className="text-[12px] leading-snug text-[#222]">{b}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

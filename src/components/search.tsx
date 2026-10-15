@@ -7,14 +7,14 @@ import { assetTitle } from "@/lib/catalog";
 import type { Asset } from "@/lib/types";
 
 /**
- * Top-bar typeahead for vehicles and keys. Every word typed must appear somewhere in the
- * result (title, VIN, stock, Key ID, paired vehicle, room); the matching parts are set in
- * semibold. Picking a result opens that vehicle or key tag.
+ * Top-bar typeahead for vehicles and keys. Vehicles match on name and VIN, keys on Key ID;
+ * every word typed must appear, and the matching parts are set in semibold. Picking a
+ * result opens that vehicle or key tag.
  */
 
 const LIMIT = 6;
 
-type Hit = { kind: "vehicle"; asset: Asset; title: string; sub: string } | { kind: "key"; asset: Asset; title: string; sub: string };
+type Hit = { kind: "vehicle" | "key"; asset: Asset; title: string; sub?: string };
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -42,16 +42,11 @@ const vehicleName = (v: Asset) => `${v.year} ${v.make} ${v.model}`;
 export function SearchBox({
   vehicles,
   keys,
-  vehicleById,
-  roomOf,
   onPickVehicle,
   onPickKey,
 }: {
   vehicles: Asset[];
   keys: Asset[];
-  vehicleById: Map<string, Asset>;
-  /** Where a key is stored (room / In Lot / Off Lot), for its subtitle. */
-  roomOf: (key: Asset) => string;
   onPickVehicle: (id: string) => void;
   onPickKey: (id: string) => void;
 }) {
@@ -61,8 +56,8 @@ export function SearchBox({
   const boxRef = useRef<HTMLDivElement>(null);
   const tokens = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query]);
 
-  const { vehicleHits, keyHits, vehicleTotal, keyTotal } = useMemo(() => {
-    if (!tokens.length) return { vehicleHits: [], keyHits: [], vehicleTotal: 0, keyTotal: 0 };
+  const { vehicleHits, keyHits } = useMemo(() => {
+    if (!tokens.length) return { vehicleHits: [], keyHits: [] };
     const matches = (hay: string) => {
       const h = hay.toLowerCase();
       return tokens.every((t) => h.includes(t));
@@ -71,18 +66,15 @@ export function SearchBox({
     const rank = (title: string) => (title.toLowerCase().startsWith(tokens[0]) ? 0 : 1);
 
     const vh: Hit[] = vehicles
-      .map((v) => ({ kind: "vehicle" as const, asset: v, title: vehicleName(v), sub: [v.vin, v.stock, v.condition].filter(Boolean).join(" • ") }))
+      .map((v) => ({ kind: "vehicle" as const, asset: v, title: vehicleName(v), sub: v.vin ?? "" }))
       .filter((h) => matches(`${h.title} ${h.sub}`))
       .sort((a, b) => rank(a.title) - rank(b.title));
     const kh: Hit[] = keys
-      .map((k) => {
-        const v = k.vehicleId ? vehicleById.get(k.vehicleId) : undefined;
-        return { kind: "key" as const, asset: k, title: assetTitle(k), sub: `${v ? vehicleName(v) : "Unpaired key"} · ${roomOf(k)}` };
-      })
-      .filter((h) => matches(`${h.title} ${h.sub}`))
+      .map((k) => ({ kind: "key" as const, asset: k, title: assetTitle(k) }))
+      .filter((h) => matches(h.title))
       .sort((a, b) => rank(a.title) - rank(b.title));
-    return { vehicleHits: vh.slice(0, LIMIT), keyHits: kh.slice(0, LIMIT), vehicleTotal: vh.length, keyTotal: kh.length };
-  }, [tokens, vehicles, keys, vehicleById, roomOf]);
+    return { vehicleHits: vh.slice(0, LIMIT), keyHits: kh.slice(0, LIMIT) };
+  }, [tokens, vehicles, keys]);
 
   const flat = [...vehicleHits, ...keyHits];
   const showList = open && tokens.length > 0;
@@ -112,7 +104,7 @@ export function SearchBox({
           onMouseEnter={() => setActive(idx)}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => pick(h)}
-          className={`flex w-full items-center gap-3 px-3 py-2 text-left ${isActive ? "bg-[#eef6f3]" : "hover:bg-[#f7f7f7]"}`}
+          className={`flex w-full items-center gap-3 px-3 py-2 text-left ${isActive ? "bg-[#f2f2f2]" : "hover:bg-[#f2f2f2]"}`}
         >
           {v ? (
             // eslint-disable-next-line @next/next/no-img-element -- local photo
@@ -128,9 +120,11 @@ export function SearchBox({
             <span className="block truncate text-[15px] text-[#333]">
               <Highlight text={h.title} tokens={tokens} />
             </span>
-            <span className="block truncate text-[13px] text-[#777]">
-              <Highlight text={h.sub} tokens={tokens} />
-            </span>
+            {h.sub && (
+              <span className="block truncate text-[13px] text-[#777]">
+                <Highlight text={h.sub} tokens={tokens} />
+              </span>
+            )}
           </span>
         </button>
       </li>
@@ -163,7 +157,7 @@ export function SearchBox({
               pick(flat[Math.min(active, flat.length - 1)]);
             }
           }}
-          placeholder="Search vehicles, VIN, stock, Key ID"
+          placeholder="Search vehicle, VIN or Key ID"
           role="combobox"
           aria-expanded={showList}
           aria-controls="search-results"
@@ -185,9 +179,7 @@ export function SearchBox({
             <>
               {vehicleHits.length > 0 && (
                 <>
-                  <p className="flex justify-between px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">
-                    Vehicles <span className="font-semibold normal-case tracking-normal">{vehicleTotal > LIMIT ? `${LIMIT} of ${vehicleTotal}` : vehicleTotal}</span>
-                  </p>
+                  <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">Vehicles</p>
                   <ul role="listbox" aria-label="Vehicles">
                     {vehicleHits.map((h, i) => row(h, i))}
                   </ul>
@@ -195,9 +187,7 @@ export function SearchBox({
               )}
               {keyHits.length > 0 && (
                 <>
-                  <p className={`flex justify-between px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f] ${vehicleHits.length ? "mt-1 border-t border-[#eee]" : ""}`}>
-                    Keys <span className="font-semibold normal-case tracking-normal">{keyTotal > LIMIT ? `${LIMIT} of ${keyTotal}` : keyTotal}</span>
-                  </p>
+                  <p className={`px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f] ${vehicleHits.length ? "mt-1 border-t border-[#eee]" : ""}`}>Keys</p>
                   <ul role="listbox" aria-label="Keys">
                     {keyHits.map((h, i) => row(h, vehicleHits.length + i))}
                   </ul>

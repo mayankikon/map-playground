@@ -5,8 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronUp, CircleHelp } from "lucide-react";
 
 import { AssetGlyph } from "./markers";
-import { FIGMA, TYPE_BY_ID, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog";
-import type { AppVersion, Asset, AssetView, Geofence, InventoryAge } from "@/lib/types";
+import { FIGMA, STOCK_COLOR, TYPE_BY_ID, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog";
+import { STOCK_TYPES, type AppVersion, type Asset, type AssetView, type Condition, type Geofence, type InventoryAge } from "@/lib/types";
 
 /*
  * Toolbox app shell from Figma "Inventory Management" → Satellite View
@@ -86,9 +86,9 @@ export function NavRail({ version, onVersion }: { version: AppVersion; onVersion
   );
 }
 
-const VERSIONS: { id: AppVersion; label: string; hint: string }[] = [
-  { id: "v1", label: "V1", hint: "Room names only: no photos, floor or battery" },
-  { id: "v2", label: "V2", hint: "Named rooms with photos (current)" },
+const VERSIONS: { id: AppVersion; label: string }[] = [
+  { id: "v1", label: "V1" },
+  { id: "v2", label: "V2" },
 ];
 
 /** Prototype version switch, bottom of the nav rail; the menu opens upward. */
@@ -119,10 +119,7 @@ function VersionSelect({ version, onVersion }: { version: AppVersion; onVersion:
                 className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-[#f4f4f4]"
               >
                 <span className="mt-0.5 w-4 shrink-0">{v.id === version && <Check size={14} className="text-[#1a9375]" />}</span>
-                <span>
-                  <span className="block text-[14px] font-semibold">{v.label}</span>
-                  <span className="block text-[12px] text-[#666]">{v.hint}</span>
-                </span>
+                <span className="text-[14px] font-semibold">{v.label}</span>
               </button>
             </li>
           ))}
@@ -213,7 +210,7 @@ function ListRow({ asset, selected, onClick }: { asset: Asset; selected: boolean
                   {asset.vin} • {asset.stock}
                 </span>
                 <span className="truncate text-[16px] text-[#666]">
-                  <span className={asset.condition === "New" ? "" : "text-[#666]"}>{asset.condition}</span> • {fmtMoney(asset.price)} • {fmtMiles(asset.miles)}
+                  <span style={{ color: asset.condition && asset.condition !== "New" ? STOCK_COLOR[asset.condition] : undefined }}>{asset.condition}</span> • {fmtMoney(asset.price)} • {fmtMiles(asset.miles)}
                 </span>
               </>
             ) : (
@@ -311,7 +308,7 @@ export function VehicleListPanel({
 /* ---------------- Map filter bar ---------------- */
 
 export interface Filters {
-  stock: ("New" | "Preowned")[];
+  stock: Condition[];
   age: InventoryAge[];
   battery: ("full" | "low")[];
   nonReportingOnly: boolean;
@@ -450,10 +447,7 @@ export function FilterBar({
         </div>
         <Dropdown
           label="Stock Type"
-          options={[
-            { value: "New", label: "New" },
-            { value: "Preowned", label: "Preowned" },
-          ]}
+          options={STOCK_TYPES.map((t) => ({ value: t, label: t }))}
           value={filters.stock}
           onChange={(stock) => onFilters({ ...filters, stock })}
           open={open === "stock"}

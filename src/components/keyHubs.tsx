@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Map as MbMap } from "mapbox-gl";
 import { Briefcase, Building2, ChevronDown, ChevronRight, KeyRound, MapPin, Pencil, Radio, Store, Wrench, X } from "lucide-react";
 
@@ -8,8 +8,8 @@ import { KeyBattery, PreviewShell } from "./markers";
 import { useVersion } from "./version";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
 import { KEY_GROUPS, KEY_HUBS, type KeyHub, type KeyLocationId } from "@/lib/hubs";
-import { assetTitle } from "@/lib/catalog";
-import type { AppVersion, Asset, Condition } from "@/lib/types";
+import { STOCK_COLOR, assetTitle } from "@/lib/catalog";
+import { STOCK_TYPES, type AppVersion, type Asset, type Condition } from "@/lib/types";
 
 /* ---------------- Shared bits ---------------- */
 
@@ -99,7 +99,7 @@ function OnlineBadge({ online }: { online: boolean }) {
   );
 }
 
-const CONDITION_COLOR: Record<Condition, string> = { New: "#1a9375", Preowned: "#e64b17" };
+const CONDITION_COLOR = STOCK_COLOR;
 
 const vehicleLine = (v?: Asset) => (v ? `${v.year} ${v.make} ${v.model}` : "Unpaired key");
 
@@ -229,14 +229,8 @@ export function KeyLocationPanel({
   const sectionRef = useRef<HTMLElement>(null);
   const [stock, setStock] = useState<Condition | "all">("all");
   const [open, setOpen] = useState(false);
-  const conditions = useMemo(() => {
-    const set = new Set<Condition>();
-    location.keys.forEach((k) => {
-      const c = k.vehicleId ? vehicleById.get(k.vehicleId)?.condition : undefined;
-      if (c) set.add(c);
-    });
-    return [...set];
-  }, [location.keys, vehicleById]);
+  // Every stock type is offered, whether or not this room holds one right now.
+  const conditions: readonly Condition[] = STOCK_TYPES;
   const rows = location.keys.filter((k) => stock === "all" || vehicleById.get(k.vehicleId ?? "")?.condition === stock);
 
   const hoveredKey = hovered ? location.keys.find((k) => k.id === hovered.id) : undefined;
@@ -263,7 +257,8 @@ export function KeyLocationPanel({
     >
       {showPhoto ? (
       <div className="relative shrink-0">
-        <LocationTile location={location} className="h-[200px] w-full" />
+        {/* Same 4:3 as the vehicle details gallery (400 × 300). */}
+        <LocationTile location={location} className="aspect-[4/3] w-full" />
         {onRoomImage && (
           <label
             title={`Upload a new photo of ${location.name}`}
@@ -349,7 +344,9 @@ export function KeyLocationPanel({
             <li
               key={k.id}
               data-key-id={k.id}
-              className={`flex items-center gap-3 border-b border-[#e8e8e8] px-4 py-3 ${selected ? "bg-[#e5e5e5]" : "hover:bg-[#f4f4f4]"}`}
+              // The whole row acts like the Key ID; the vehicle line keeps its own action.
+              onClick={() => onOpenKey(k.id)}
+              className={`flex cursor-pointer items-center gap-3 border-b border-[#e8e8e8] px-4 py-3 ${selected ? "bg-[#e5e5e5]" : "hover:bg-[#f4f4f4]"}`}
               onMouseEnter={(e) => {
                 const s = sectionRef.current?.getBoundingClientRect();
                 const r = e.currentTarget.getBoundingClientRect();
@@ -362,7 +359,10 @@ export function KeyLocationPanel({
                 <span className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => onOpenKey(k.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenKey(k.id);
+                    }}
                     className="block text-left text-[16px] font-semibold text-[#111] hover:text-[#007cbe] hover:underline"
                     aria-label={`${assetTitle(k)}: open its vehicle and center the map on the key`}
                   >
@@ -374,7 +374,10 @@ export function KeyLocationPanel({
                 {v ? (
                   <button
                     type="button"
-                    onClick={() => onOpenVehicle(v.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenVehicle(v.id);
+                    }}
                     className="block max-w-full truncate text-left text-[14px] text-[#666] hover:text-[#111] hover:underline"
                     aria-label={`Go to ${vehicleLine(v)}`}
                   >
@@ -390,7 +393,13 @@ export function KeyLocationPanel({
                   <span className="block text-[14px] text-[#8f8f8f]">{vehicleLine(v)}</span>
                 )}
               </span>
-              <button type="button" onClick={() => onOpenKey(k.id)} aria-label={`Open ${assetTitle(k)}`} className="rounded p-1 text-[#666] hover:bg-[#e5e5e5]">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenKey(k.id);
+                }}
+                aria-label={`Open ${assetTitle(k)}`} className="rounded p-1 text-[#666] hover:bg-[#e5e5e5]">
                 <ChevronRight size={16} />
               </button>
             </li>

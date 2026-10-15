@@ -1,7 +1,19 @@
 import { mulberry32 } from "./geo";
 import { TOYOTA_GRAPEVINE } from "./toyota-lot";
 import { seedHubKeys, seedLooseKeys } from "./hubs";
-import type { Asset, Geofence, InventoryAge, LngLat } from "./types";
+import type { Asset, Condition, Geofence, InventoryAge, LngLat } from "./types";
+
+/**
+ * Stock type for a demo vehicle, stable per id: about 3 in 10 new cars are Demos; preowned
+ * cars are split into Loaner, Service and BVA (buy-back) alongside plain Preowned.
+ */
+export function stockTypeFor(id: string, isNew: boolean): Condition {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  const r = ((h >>> 0) % 100) / 100;
+  if (isNew) return r < 0.3 ? "Demo" : "New";
+  return r < 0.18 ? "Loaner" : r < 0.32 ? "Service" : r < 0.44 ? "BVA" : "Preowned";
+}
 
 /** Demo data: Toyota of Grapevine (701 E State Hwy 114, Grapevine, TX), its vehicles and keys. */
 
@@ -81,7 +93,7 @@ export function seedToyotaAssets(): Asset[] {
       model,
       vin,
       stock: vin.slice(-7),
-      condition: isNew ? "New" : "Preowned",
+      condition: stockTypeFor(`tgv-v-${r}-${i}`, isNew),
       price: Math.round((base * (isNew ? 1 : 0.65 + rand() * 0.25)) / 5) * 5,
       miles: isNew ? Math.floor(rand() * 25) : 9000 + Math.floor(rand() * 70000),
       noImage: rand() < 0.08,

@@ -41,14 +41,23 @@ interface Props {
 }
 
 /** 50% opacity on every regular marker layer; hover and click still work. */
+/** Dimmed (everything but the focus): 65% opacity and 10% less saturation. */
+export const DIM_OPACITY = 0.65;
+const DIM_SATURATION = 0.9;
+const dimmedMaps = new WeakSet<MbMap>();
+
 function applyDim(map: MbMap, dim: boolean) {
   if (!map.getLayer("asset-pins")) return;
-  const o = dim ? 0.5 : 1;
+  if (dim) dimmedMaps.add(map);
+  else dimmedMaps.delete(map);
+  const o = dim ? DIM_OPACITY : 1;
+  // Symbol icons have no saturation paint property: switch to the pre-desaturated "-dim" copies.
+  map.setLayoutProperty("asset-pins", "icon-image", pinIconExpr(null, dim));
   map.setPaintProperty("asset-pins", "icon-opacity", o);
   map.setPaintProperty("clusters", "circle-opacity", o);
   map.setPaintProperty("clusters", "circle-stroke-opacity", o);
   map.setPaintProperty("cluster-count", "text-opacity", o);
-  map.setPaintProperty("cluster-shadow", "circle-opacity", dim ? 0.11 : 0.22);
+  map.setPaintProperty("cluster-shadow", "circle-opacity", dim ? 0.22 * DIM_OPACITY : 0.22);
 }
 
 type Hover = { kind: "asset"; id: string } | null;
@@ -236,13 +245,28 @@ async function installImages(map: MbMap) {
   const icons = await buildIcons();
   for (const [name, img] of Object.entries(icons)) {
     if (!map.hasImage(name)) map.addImage(name, img, { pixelRatio: RATIO });
+    if (!map.hasImage(`${name}-dim`)) map.addImage(`${name}-dim`, desaturate(img, DIM_SATURATION), { pixelRatio: RATIO });
   }
 }
 
 /* ---------- Layers ---------- */
 
-function pinIconExpr(hoverId: string | null): mapboxgl.ExpressionSpecification {
-  return ["case", ["any", ["get", "selected"], ["==", ["get", "id"], hoverId ?? ""]], ["get", "iconHover"], ["get", "icon"]];
+/** Copy of an icon with its saturation scaled (Rec. 709 luma kept). */
+function desaturate(img: ImageData, amount: number): ImageData {
+  const out = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
+  const d = out.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    d[i] = l + (d[i] - l) * amount;
+    d[i + 1] = l + (d[i + 1] - l) * amount;
+    d[i + 2] = l + (d[i + 2] - l) * amount;
+  }
+  return out;
+}
+
+function pinIconExpr(hoverId: string | null, dim = false): mapboxgl.ExpressionSpecification {
+  const icon: mapboxgl.ExpressionSpecification = ["case", ["any", ["get", "selected"], ["==", ["get", "id"], hoverId ?? ""]], ["get", "iconHover"], ["get", "icon"]];
+  return dim ? ["concat", icon, "-dim"] : icon;
 }
 
 type BubbleKey = { clusterId?: number | string; gid?: string } | null;
@@ -428,7 +452,7 @@ export default function MapView(props: Props) {
     hoverRef.current = h;
     setHoverState(h);
     const m = mapRef.current;
-    if (m?.getLayer("asset-pins")) m.setLayoutProperty("asset-pins", "icon-image", pinIconExpr(h?.kind === "asset" ? h.id : null));
+    if (m?.getLayer("asset-pins")) m.setLayoutProperty("asset-pins", "icon-image", pinIconExpr(h?.kind === "asset" ? h.id : null, dimmedMaps.has(m)));
   };
 
   const setBubbleHover = (m: MbMap, key: BubbleKey) => {
@@ -462,7 +486,7 @@ export default function MapView(props: Props) {
   const reinstall = (m: MbMap) => {
     bubbleHoverRef.current = null;
     installLayers(m, normalizeSettings(latest.current.settings));
-    m.setLayoutProperty("asset-pins", "icon-image", pinIconExpr(hoverRef.current?.kind === "asset" ? hoverRef.current.id : null));
+    m.setLayoutProperty("asset-pins", "icon-image", pinIconExpr(hoverRef.current?.kind === "asset" ? hoverRef.current.id : null, dimmedMaps.has(m)));
     void installImages(m);
     pushAssets(m);
     pushGeofences(m);

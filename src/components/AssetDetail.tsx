@@ -5,7 +5,7 @@ import { Camera, ImageOff, LocateFixed, Trash2, X } from "lucide-react";
 
 import { AssetMarker } from "./markers";
 import { ASSET_TYPES, GEOFENCE_COLOR, TYPE_BY_ID, assetTitle } from "@/lib/catalog";
-import type { Asset, Condition, Geofence } from "@/lib/types";
+import { STOCK_TYPES, type Asset, type Condition, type Geofence } from "@/lib/types";
 
 interface Props {
   asset: Asset;
@@ -107,8 +107,9 @@ export default function AssetDetail({ asset, geofences, onChange, onDelete, onCl
             <div className="grid grid-cols-3 gap-2">
               <Field label="Condition">
                 <select className="field" value={asset.condition} onChange={(e) => onChange({ condition: e.target.value as Condition })}>
-                  <option>New</option>
-                  <option>Preowned</option>
+                  {STOCK_TYPES.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
                 </select>
               </Field>
               <Field label="Price">

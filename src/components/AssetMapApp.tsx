@@ -7,7 +7,7 @@ import { FileCode2, PenLine, X } from "lucide-react";
 import MapView from "./MapView";
 import { HandoffPanel } from "./handoff";
 import { SearchBox } from "./search";
-import { VersionContext } from "./version";
+import { VehicleLookupContext, VersionContext } from "./version";
 import AssetDetail from "./AssetDetail";
 import { GroupKeysOverlay, RoomKeysOverlay } from "./focus";
 import { HubMarkers, KeyLocationPanel, KeysTab, buildLocations } from "./keyHubs";
@@ -15,7 +15,7 @@ import VehicleDetailPanel from "./vehicleDetail";
 import { batteryLow, EMPTY_FILTERS, FilterBar, GeofenceSelect, Legend, MapBar, NavRail, TopBar, VehicleListPanel, applyFilters, type Filters } from "./toolbox";
 import { DEFAULT_SETTINGS, INITIAL_VIEW, TYPE_BY_ID, inView, isLngLat, normalizeSettings } from "@/lib/catalog";
 import { pointInPolygon } from "@/lib/geo";
-import { seedAssets, seedGeofences, seedToyotaAssets, seedToyotaGeofence } from "@/lib/seed";
+import { seedAssets, seedGeofences, seedToyotaAssets, seedToyotaGeofence, stockTypeFor } from "@/lib/seed";
 import { keyLocation, keysByLocation, seedHubKeys, seedLooseKeys, type KeyLocationId } from "@/lib/hubs";
 import { type AppVersion, type Asset, type DisplaySettings, type AssetView, type FlyRequest, type FlyTarget, type Geofence, type LngLat, type MapStyleId, type Mode } from "@/lib/types";
 
@@ -44,7 +44,7 @@ interface Persisted {
  * 6 = two keys paired to every vehicle, all stored in the building's rooms.
  * Older saves are upgraded once, keeping the user's own data.
  */
-const SEED_VERSION = 9;
+const SEED_VERSION = 11;
 
 /** Zoom from which key locations show as their own markers. */
 const HUB_ZOOM = 16;
@@ -157,6 +157,12 @@ export default function AssetMapApp() {
       const vehicles = kept.filter((a) => a.id.startsWith("tgv-v-"));
       const hubKeys = seedHubKeys(vehicles);
       savedAssets = [...kept, ...hubKeys, ...seedLooseKeys(vehicles, hubKeys)];
+    }
+    if (saved && (saved.seedVersion ?? 1) < 11 && savedAssets) {
+      // Stock types beyond New / Preowned: Demo (from New), Loaner, Service, BVA (from Preowned).
+      savedAssets = savedAssets.map((a) =>
+        a.id.startsWith("tgv-v-") && a.condition ? { ...a, condition: stockTypeFor(a.id, a.condition === "New" || a.condition === "Demo") } : a,
+      );
     }
     setAssets(savedAssets ?? seedAssets());
     setGeofences(savedFences ?? seedGeofences());
@@ -282,6 +288,11 @@ export default function AssetMapApp() {
   const selectedAsset = assets.find((a) => a.id === selectedAssetId) ?? null;
   const visibleAssets = useMemo(() => assets.filter((a) => inView(a, view)), [assets, view]);
   const shownAssets = useMemo(() => applyFilters(visibleAssets, filters, ""), [visibleAssets, filters]);
+  // Totals for the collapsed list button, whatever the current tab (filters still apply).
+  const listCounts = useMemo(() => {
+    const all = applyFilters(assets, filters, "");
+    return { vehicles: all.filter((a) => a.typeId.startsWith("vehicle")).length, keys: all.filter((a) => a.typeId === "key").length };
+  }, [assets, filters]);
   // From HUB_ZOOM, keys stored in a key location are drawn as that location's marker, not one by
   // one; zoomed further out they simply count toward the clusters.
   const hubsVisible = zoom >= HUB_ZOOM;
@@ -355,10 +366,6 @@ export default function AssetMapApp() {
     if (viewMode === "list") setViewMode("map");
     openVehicle(vehicleId);
   };
-  const keyRoomName = useCallback(
-    (k: Asset) => locations.find((l) => l.id === keyLocation(k, geofences))?.name ?? "Unknown",
-    [locations, geofences],
-  );
   /** Key ID clicked: open the vehicle it belongs to, but center the map on the key. */
   /** Vehicles / Keys tabs: leaving Keys closes the key panel; a selection that doesn't belong to the view is cleared. */
   const changeView = (v: AssetView) => {
@@ -378,7 +385,10 @@ export default function AssetMapApp() {
     if (!k) return;
     if (k.vehicleId && vehicleById.has(k.vehicleId)) leaveKeysFor(k.vehicleId);
     else selectAsset(k.id);
-    fly({ kind: "point", center: k.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5) });
+    // Centre the key tag in the map area left visible by the vehicle drawer (left 16 + 400 px).
+    const w = mapRef.current?.getContainer().clientWidth ?? 1200;
+    const dx = w > 640 ? 208 : 0;
+    fly({ kind: "point", center: k.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5), offset: [dx, 0] });
   };
   /** Vehicle clicked: open it and go to it. */
   /**
@@ -427,6 +437,7 @@ export default function AssetMapApp() {
 
   return (
     <VersionContext value={version}>
+    <VehicleLookupContext value={vehicleById}>
     <div className="flex h-dvh w-full overflow-hidden bg-white text-[#111]">
       <NavRail version={version} onVersion={changeVersion} />
 
@@ -436,8 +447,6 @@ export default function AssetMapApp() {
             <SearchBox
               vehicles={assets.filter((a) => a.typeId.startsWith("vehicle"))}
               keys={assets.filter((a) => a.typeId === "key")}
-              vehicleById={vehicleById}
-              roomOf={keyRoomName}
               onPickVehicle={openVehicleFromSearch}
               onPickKey={openKeyTag}
             />
@@ -472,6 +481,12 @@ export default function AssetMapApp() {
                 onPlaceAsset={placeAsset}
                 onMoveAsset={moveAsset}
                 onSelectAsset={(id) => {
+                  // A key on the map stands for its vehicle: open that (hover shows the key's tooltip).
+                  const k = id ? assets.find((a) => a.id === id && a.typeId === "key") : undefined;
+                  if (k) {
+                    if (k.vehicleId && vehicleById.has(k.vehicleId)) openKeyVehicle(k.id);
+                    return;
+                  }
                   selectAsset(id);
                   if (id && vehicleById.has(id)) frameVehicleWithKeys(id, true);
                 }}
@@ -524,9 +539,12 @@ export default function AssetMapApp() {
               <button
                 type="button"
                 onClick={() => setListOpen(true)}
-                aria-label="Show list"
-                className="absolute left-0 top-[80px] z-20 rounded-r-[4px] border border-l-0 border-[#dcdcdc] bg-white py-2 pl-1 pr-1.5 shadow-[0_1px_3px_rgba(0,0,0,.2)] hover:bg-[#f4f4f4]"
+                aria-label={`Show list: ${listCounts.vehicles} vehicles and ${listCounts.keys} keys`}
+                className="absolute left-0 top-[80px] z-20 flex items-center gap-2 rounded-r-[4px] border border-l-0 border-[#dcdcdc] bg-white py-2 pl-3 pr-1.5 shadow-[0_1px_3px_rgba(0,0,0,.2)] hover:bg-[#f4f4f4]"
               >
+                <span className="whitespace-nowrap text-[14px] font-semibold text-[#111]">
+                  Show {listCounts.vehicles} vehicles & {listCounts.keys} keys
+                </span>
                 {/* eslint-disable-next-line @next/next/no-img-element -- Figma icon */}
                 <img alt="" src="/figma/app/panel-collapse.svg" className="size-6 -scale-x-100" />
               </button>
@@ -661,7 +679,8 @@ export default function AssetMapApp() {
               />
             )}
 
-            {selectedAsset && viewMode === "map" && (!selectedIsVehicle || editingId === selectedAsset.id) && (
+            {/* Keys never open the edit card: clicking one opens its paired vehicle instead. */}
+            {selectedAsset && viewMode === "map" && selectedAsset.typeId !== "key" && (!selectedIsVehicle || editingId === selectedAsset.id) && (
               <AssetDetail
                 asset={selectedAsset}
                 geofences={membership.byAsset.get(selectedAsset.id) ?? []}
@@ -675,6 +694,7 @@ export default function AssetMapApp() {
         </div>
       </div>
     </div>
+    </VehicleLookupContext>
     </VersionContext>
   );
 }

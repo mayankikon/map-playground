@@ -1,4 +1,4 @@
-import type { Asset, AssetType, AssetView, DisplaySettings, LngLat, MapStyleId } from "./types";
+import type { Asset, AssetType, AssetView, DisplaySettings, LngLat, MapStyleId, Condition } from "./types";
 
 /** Colors and assets come from the "Map Assets" anatomy sheet in Figma (node 15099:114724). */
 export const ASSET_TYPES: AssetType[] = [
@@ -47,6 +47,16 @@ export const styleUrl = (id: MapStyleId) => (MAP_STYLES.find((s) => s.id === id)
 
 /** Figma "Geofence Boundary" color — every geofence uses it. */
 export const GEOFENCE_COLOR = "#0B6494";
+
+/** Text colour per stock type (list rows, cards, key panel). */
+export const STOCK_COLOR: Record<Condition, string> = {
+  New: "#1a9375",
+  Preowned: "#e64b17",
+  Loaner: "#6b4fbb",
+  Demo: "#0b6494",
+  Service: "#a86a00",
+  BVA: "#5b6770",
+};
 
 export const inView = (a: Asset, view: AssetView) => view === "all" || (TYPE_BY_ID[a.typeId]?.kind === "key") === (view === "keys");
 

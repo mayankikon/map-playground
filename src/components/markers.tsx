@@ -1,11 +1,11 @@
 /* eslint-disable @next/next/no-img-element -- map markers are plain DOM images */
 "use client";
 
-import { FIGMA, TYPE_BY_ID, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog";
+import { FIGMA, STOCK_COLOR, TYPE_BY_ID, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog";
 import type { Asset, InventoryAge } from "@/lib/types";
 import { BatteryFull, BatteryLow, BatteryMedium } from "lucide-react";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
-import { useVersion } from "./version";
+import { useVehicleLookup, useVersion } from "./version";
 
 /*
  * Map asset anatomy from Figma "Inventory Management" → Map Assets (15099:114724).
@@ -143,30 +143,45 @@ export function AssetPreview({ asset }: { asset: Asset }) {
           {asset.vin} • {asset.stock}
         </Sub>
         <Sub>
-          <span className={asset.condition === "New" ? "text-[#126550]" : "text-[#e64b17]"}>{asset.condition}</span>
+          <span style={{ color: asset.condition ? STOCK_COLOR[asset.condition] : undefined }}>{asset.condition}</span>
           {` • ${fmtMoney(asset.price)} • ${fmtMiles(asset.miles)}`}
         </Sub>
         {!asset.reporting && <Sub className="!text-[#B10F2E]">Not reporting</Sub>}
       </PreviewShell>
     );
   }
-  if (kind === "key") {
-    const info = keyInfo(asset);
-    return (
-      <PreviewShell>
-        <div className="flex items-center gap-2">
-          <p className="truncate text-[16px] font-semibold text-[#111]">{assetTitle(asset)}</p>
-          <KeyBattery pct={info.batteryPct} />
-        </div>
-        <Sub>Last reported: {ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</Sub>
-        <Sub>{asset.address || "No address"}</Sub>
-      </PreviewShell>
-    );
-  }
+  if (kind === "key") return <KeyPreview asset={asset} />;
   return (
     <PreviewShell>
       <Title>{assetTitle(asset)}</Title>
       <Sub className={asset.reporting ? "" : "!text-[#B10F2E]"}>{asset.reporting ? "Location up to date" : "Not reporting"}</Sub>
+    </PreviewShell>
+  );
+}
+
+/** Key tooltip: Key ID (+ battery), the paired vehicle, last report. Clicking the key opens that vehicle. */
+function KeyPreview({ asset }: { asset: Asset }) {
+  const vehicles = useVehicleLookup();
+  const v = asset.vehicleId ? vehicles.get(asset.vehicleId) : undefined;
+  const info = keyInfo(asset);
+  return (
+    <PreviewShell>
+      <div className="flex items-center gap-2">
+        <p className="truncate text-[16px] font-semibold text-[#111]">{assetTitle(asset)}</p>
+        <KeyBattery pct={info.batteryPct} />
+      </div>
+      {v ? (
+        <>
+          <p className="mt-1 truncate text-[14px] font-semibold text-[#333]">
+            {v.year} {v.make} {v.model}
+          </p>
+          <Sub>{v.vin}</Sub>
+        </>
+      ) : (
+        <Sub>Not paired to a vehicle</Sub>
+      )}
+      <Sub>Last reported: {ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</Sub>
+      {v && <p className="mt-1.5 text-[12px] font-semibold text-[#007cbe]">Click to open vehicle</p>}
     </PreviewShell>
   );
 }
