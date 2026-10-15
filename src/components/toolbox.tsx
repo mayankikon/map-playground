@@ -146,19 +146,11 @@ function VersionSelect({ version, onVersion }: { version: AppVersion; onVersion:
 
 /* ---------------- Top bar ---------------- */
 
-export function TopBar({ query, onQuery }: { query: string; onQuery: (q: string) => void }) {
+export function TopBar({ search }: { search: React.ReactNode }) {
   return (
-    <header className="flex h-[54px] shrink-0 gap-px bg-[#dcdcdc]">
+    <header className="relative z-50 flex h-[54px] shrink-0 gap-px bg-[#dcdcdc]">
       <div className="flex flex-1 items-center border-b border-[#dcdcdc] bg-white py-[7px] pl-8 pr-4">
-        <label className="flex h-10 w-[280px] items-center gap-2 rounded-[4px] border border-[#dcdcdc] bg-[#f4f4f4] px-2 py-1.5 focus-within:border-[#1a9375]">
-          <img alt="" src={A("search.svg")} className="size-6" />
-          <input
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            placeholder="Search"
-            className="w-full bg-transparent text-[16px] leading-[22px] text-[#111] outline-none placeholder:text-[#8f8f8f]"
-          />
-        </label>
+        {search}
         <div className="flex flex-1 items-center justify-end gap-6">
           <button type="button" aria-label="Help" className="text-[#666] hover:text-[#111]">
             <CircleHelp size={24} strokeWidth={1.75} />

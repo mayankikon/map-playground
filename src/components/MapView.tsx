@@ -474,6 +474,7 @@ export default function MapView(props: Props) {
   useEffect(() => {
     let cancelled = false;
     let created: MbMap | undefined;
+    let resizeObserver: ResizeObserver | undefined;
     const markers = markersRef.current;
 
     (async () => {
@@ -492,6 +493,12 @@ export default function MapView(props: Props) {
       created = m;
       mapRef.current = m;
       if (process.env.NODE_ENV !== "production") (window as unknown as { __map: MbMap }).__map = m;
+
+      // Keep the canvas filling its container. Mapbox only listens to window resizes, so
+      // collapsing the list panel (or any layout change beside the map) left a blank strip.
+      // (ResizeObserver already batches to once per frame.)
+      resizeObserver = new ResizeObserver(() => m.resize());
+      resizeObserver.observe(containerRef.current);
 
       m.on("style.load", () => reinstall(m));
       m.on("load", () => {
@@ -643,6 +650,7 @@ export default function MapView(props: Props) {
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
       markers.forEach(({ marker }) => marker.remove());
       markers.clear();
       created?.remove();

@@ -6,6 +6,7 @@ import { FileCode2, PenLine, X } from "lucide-react";
 
 import MapView from "./MapView";
 import { HandoffPanel } from "./handoff";
+import { SearchBox } from "./search";
 import { VersionContext } from "./version";
 import AssetDetail from "./AssetDetail";
 import { GroupKeysOverlay, RoomKeysOverlay } from "./focus";
@@ -15,7 +16,7 @@ import { batteryLow, EMPTY_FILTERS, FilterBar, GeofenceSelect, Legend, MapBar, N
 import { DEFAULT_SETTINGS, INITIAL_VIEW, TYPE_BY_ID, inView, isLngLat, normalizeSettings } from "@/lib/catalog";
 import { pointInPolygon } from "@/lib/geo";
 import { seedAssets, seedGeofences, seedToyotaAssets, seedToyotaGeofence } from "@/lib/seed";
-import { keysByLocation, seedHubKeys, seedLooseKeys, type KeyLocationId } from "@/lib/hubs";
+import { keyLocation, keysByLocation, seedHubKeys, seedLooseKeys, type KeyLocationId } from "@/lib/hubs";
 import { type AppVersion, type Asset, type DisplaySettings, type AssetView, type FlyRequest, type FlyTarget, type Geofence, type LngLat, type MapStyleId, type Mode } from "@/lib/types";
 
 const STORAGE_KEY = "asset-map:v2";
@@ -91,7 +92,6 @@ export default function AssetMapApp() {
   const [view, setView] = useState<AssetView>("vehicles");
   /** Where the "Map" button returns to after Satellite (Streets unless another style was in use). */
   const [lastMapStyle, setLastMapStyle] = useState<MapStyleId>("streets");
-  const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [listOpen, setListOpen] = useState(true);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
@@ -119,9 +119,17 @@ export default function AssetMapApp() {
   const [mapObj, setMapObj] = useState<MbMap | null>(null);
   const [openLocationId, setOpenLocationId] = useState<KeyLocationId | null>(null);
   const [hoveredRoomKeyId, setHoveredRoomKeyId] = useState<string | null>(null);
+  /** Key picked from search: its tag and row stay highlighted while its room is open. */
+  const [focusKeyId, setFocusKeyId] = useState<string | null>(null);
   const [roomImages, setRoomImages] = useState<Record<string, string>>({});
   /** Vehicle whose editable card is open next to its details page ("Edit details"). */
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Opening / collapsing the list panel changes the map's width: refit the canvas right away
+  // (MapView also watches its container with a ResizeObserver for every other layout change).
+  useEffect(() => {
+    mapRef.current?.resize();
+  }, [listOpen, viewMode]);
 
   /* Persistence */
   useEffect(() => {
@@ -273,7 +281,7 @@ export default function AssetMapApp() {
 
   const selectedAsset = assets.find((a) => a.id === selectedAssetId) ?? null;
   const visibleAssets = useMemo(() => assets.filter((a) => inView(a, view)), [assets, view]);
-  const shownAssets = useMemo(() => applyFilters(visibleAssets, filters, query), [visibleAssets, filters, query]);
+  const shownAssets = useMemo(() => applyFilters(visibleAssets, filters, ""), [visibleAssets, filters]);
   // From HUB_ZOOM, keys stored in a key location are drawn as that location's marker, not one by
   // one; zoomed further out they simply count toward the clusters.
   const hubsVisible = zoom >= HUB_ZOOM;
@@ -319,6 +327,7 @@ export default function AssetMapApp() {
 
   const openKeyLocation = (id: KeyLocationId) => {
     setOpenLocationId(id);
+    setFocusKeyId(null);
     setSelectedAssetId(null);
     if (view === "vehicles") setView("keys");
     if (viewMode === "list") setViewMode("map");
@@ -331,6 +340,25 @@ export default function AssetMapApp() {
       fly({ kind: "bounds", points: loc.keys.map((k) => k.position), padding: { top: 120, bottom: 80, left, right: Math.min(80, Math.max(20, w - left - 200)) }, maxZoom: 18.5 });
     }
   };
+  /** Search picked a key: open its room / bucket and single out its tag and row. */
+  const openKeyTag = (keyId: string) => {
+    const k = assets.find((a) => a.id === keyId);
+    if (!k) return;
+    const locId = keyLocation(k, geofences);
+    openKeyLocation(locId);
+    setFocusKeyId(k.id);
+    // Buckets frame all their keys; for one key, go to it.
+    if (!locId.startsWith("hub-")) fly({ kind: "point", center: k.position, zoom: Math.max(zoom, 18.6) });
+  };
+  /** Search picked a vehicle: same as opening it from a key, plus back to the map. */
+  const openVehicleFromSearch = (vehicleId: string) => {
+    if (viewMode === "list") setViewMode("map");
+    openVehicle(vehicleId);
+  };
+  const keyRoomName = useCallback(
+    (k: Asset) => locations.find((l) => l.id === keyLocation(k, geofences))?.name ?? "Unknown",
+    [locations, geofences],
+  );
   /** Key ID clicked: open the vehicle it belongs to, but center the map on the key. */
   /** Vehicles / Keys tabs: leaving Keys closes the key panel; a selection that doesn't belong to the view is cleared. */
   const changeView = (v: AssetView) => {
@@ -403,7 +431,18 @@ export default function AssetMapApp() {
       <NavRail version={version} onVersion={changeVersion} />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar query={query} onQuery={setQuery} />
+        <TopBar
+          search={
+            <SearchBox
+              vehicles={assets.filter((a) => a.typeId.startsWith("vehicle"))}
+              keys={assets.filter((a) => a.typeId === "key")}
+              vehicleById={vehicleById}
+              roomOf={keyRoomName}
+              onPickVehicle={openVehicleFromSearch}
+              onPickKey={openKeyTag}
+            />
+          }
+        />
 
         <div className="flex min-h-0 flex-1">
           {listOpen && viewMode === "map" && (
@@ -495,10 +534,10 @@ export default function AssetMapApp() {
 
             {viewMode === "map" && mapObj && openLocation && showKeys && (
               openLocation.hub ? (
-                <RoomKeysOverlay map={mapObj} center={openLocation.hub.position} keys={openLocation.keys} highlightId={hoveredRoomKeyId} onOpenKey={openKeyVehicle} />
+                <RoomKeysOverlay map={mapObj} center={openLocation.hub.position} keys={openLocation.keys} highlightId={hoveredRoomKeyId ?? focusKeyId} onOpenKey={openKeyVehicle} />
               ) : (
                 // In Lot / Off Lot: each key tag where the key actually is.
-                <GroupKeysOverlay map={mapObj} keys={openLocation.keys} highlightId={hoveredRoomKeyId} onOpenKey={openKeyVehicle} />
+                <GroupKeysOverlay map={mapObj} keys={openLocation.keys} highlightId={hoveredRoomKeyId ?? focusKeyId} onOpenKey={openKeyVehicle} />
               )
             )}
 
@@ -511,12 +550,15 @@ export default function AssetMapApp() {
                 key={openLocation.id}
                 location={openLocation}
                 vehicleById={vehicleById}
-                selectedKeyId={selectedAssetId}
+                selectedKeyId={focusKeyId ?? selectedAssetId}
                 onOpenKey={openKeyVehicle}
                 onOpenVehicle={openVehicle}
                 onHoverKey={setHoveredRoomKeyId}
                 onRoomImage={version === "v2" ? setRoomImage : undefined}
-                onClose={() => setOpenLocationId(null)}
+                onClose={() => {
+                  setOpenLocationId(null);
+                  setFocusKeyId(null);
+                }}
               />
             )}
 

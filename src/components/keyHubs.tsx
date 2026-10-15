@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Map as MbMap } from "mapbox-gl";
 import { Briefcase, Building2, ChevronDown, ChevronRight, KeyRound, MapPin, Pencil, Radio, Store, Wrench, X } from "lucide-react";
 
@@ -240,6 +240,12 @@ export function KeyLocationPanel({
   const rows = location.keys.filter((k) => stock === "all" || vehicleById.get(k.vehicleId ?? "")?.condition === stock);
 
   const hoveredKey = hovered ? location.keys.find((k) => k.id === hovered.id) : undefined;
+  // A key picked elsewhere (search) scrolls its row into view.
+  useEffect(() => {
+    if (!selectedKeyId) return;
+    sectionRef.current?.querySelector(`[data-key-id="${selectedKeyId}"]`)?.scrollIntoView({ block: "center" });
+  }, [selectedKeyId]);
+
   // V1 has no place photos: rooms are bare gateways and buckets have no artwork.
   const showPhoto = !!onRoomImage;
 
@@ -342,6 +348,7 @@ export function KeyLocationPanel({
           return (
             <li
               key={k.id}
+              data-key-id={k.id}
               className={`flex items-center gap-3 border-b border-[#e8e8e8] px-4 py-3 ${selected ? "bg-[#e5e5e5]" : "hover:bg-[#f4f4f4]"}`}
               onMouseEnter={(e) => {
                 const s = sectionRef.current?.getBoundingClientRect();
