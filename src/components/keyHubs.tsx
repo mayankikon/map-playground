@@ -35,7 +35,7 @@ export interface KeyLocation {
   hub?: KeyHub;
   /** Photo of the place: the room's own, or one uploaded in the app (rooms and In Lot / Off Lot). */
   image?: string;
-  /** V1: a room is shown only as its gateway (gateway id, no photo). */
+  /** V1: a room is shown as a bare gateway (room name, no photo, no room details). */
   gatewayOnly?: boolean;
   keys: Asset[];
 }
@@ -46,7 +46,7 @@ export function buildLocations(byLocation: Map<KeyLocationId, Asset[]>, images: 
   return [
     ...KEY_HUBS.map((hub) =>
       v1
-        ? { id: hub.id, name: hub.gatewayId, hub, gatewayOnly: true, keys: byLocation.get(hub.id) ?? [] }
+        ? { id: hub.id, name: hub.name, hub, gatewayOnly: true, keys: byLocation.get(hub.id) ?? [] }
         : { id: hub.id, name: hub.name, hub, image: images[hub.id] ?? hub.image, keys: byLocation.get(hub.id) ?? [] },
     ),
     // Lot / off-lot groups only show when they actually hold keys.
@@ -155,7 +155,7 @@ function KeyDetailsCard({ k, vehicle, location, top }: { k: Asset; vehicle?: Ass
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[16px] font-semibold text-[#111]">{assetTitle(k)}</p>
-          {/* V1: the gateway id; V2: room · floor level. */}
+          {/* V1: room name; V2: room · floor level. */}
           <p className="text-[12px] text-[#666]">
             {location.name}
             {floorOf(location) && ` · ${floorOf(location)}`}

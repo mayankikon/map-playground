@@ -11,7 +11,7 @@ import AssetDetail from "./AssetDetail";
 import { GroupKeysOverlay, RoomKeysOverlay } from "./focus";
 import { HubMarkers, KeyLocationPanel, KeysTab, buildLocations } from "./keyHubs";
 import VehicleDetailPanel from "./vehicleDetail";
-import { AssetTypeToggle, batteryLow, EMPTY_FILTERS, FilterBar, GeofenceSelect, Legend, MapBar, NavRail, TopBar, VehicleListPanel, applyFilters, type Filters } from "./toolbox";
+import { batteryLow, EMPTY_FILTERS, FilterBar, GeofenceSelect, Legend, MapBar, NavRail, TopBar, VehicleListPanel, applyFilters, type Filters } from "./toolbox";
 import { DEFAULT_SETTINGS, INITIAL_VIEW, TYPE_BY_ID, inView, isLngLat, normalizeSettings } from "@/lib/catalog";
 import { pointInPolygon } from "@/lib/geo";
 import { seedAssets, seedGeofences, seedToyotaAssets, seedToyotaGeofence } from "@/lib/seed";
@@ -332,10 +332,24 @@ export default function AssetMapApp() {
     }
   };
   /** Key ID clicked: open the vehicle it belongs to, but center the map on the key. */
+  /** Vehicles / Keys tabs: leaving Keys closes the key panel; a selection that doesn't belong to the view is cleared. */
+  const changeView = (v: AssetView) => {
+    setView(v);
+    if (v === "vehicles") setOpenLocationId(null);
+    if (selectedAsset && !inView(selectedAsset, v)) setSelectedAssetId(null);
+  };
+  /** Leave the key context for the paired vehicle: close the key panel, back to the Vehicles list. */
+  const leaveKeysFor = (vehicleId: string) => {
+    setOpenLocationId(null);
+    setHoveredRoomKeyId(null);
+    setView("vehicles");
+    selectAsset(vehicleId);
+  };
   const openKeyVehicle = (keyId: string) => {
     const k = assets.find((a) => a.id === keyId);
     if (!k) return;
-    selectAsset(k.vehicleId && vehicleById.has(k.vehicleId) ? k.vehicleId : k.id);
+    if (k.vehicleId && vehicleById.has(k.vehicleId)) leaveKeysFor(k.vehicleId);
+    else selectAsset(k.id);
     fly({ kind: "point", center: k.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5) });
   };
   /** Vehicle clicked: open it and go to it. */
@@ -362,7 +376,7 @@ export default function AssetMapApp() {
   const openVehicle = (vehicleId: string) => {
     const v = vehicleById.get(vehicleId);
     if (!v) return;
-    selectAsset(v.id);
+    leaveKeysFor(v.id);
     if (!frameVehicleWithKeys(v.id)) fly({ kind: "point", center: v.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5) });
   };
 
@@ -400,11 +414,7 @@ export default function AssetMapApp() {
               onSelect={selectAndFly}
               onCollapse={() => setListOpen(false)}
               tab={listTab}
-              onTab={(t) => {
-                setView(t);
-                if (t === "vehicles") setOpenLocationId(null);
-                if (selectedAsset && !inView(selectedAsset, t)) setSelectedAssetId(null);
-              }}
+              onTab={changeView}
               keysContent={<KeysTab locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />}
             />
           )}
@@ -463,7 +473,7 @@ export default function AssetMapApp() {
                   onSelect={selectAndFly}
                   full
                   tab={listTab}
-                  onTab={(t) => setView(t)}
+                  onTab={changeView}
                   keysContent={<KeysTab locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />}
                 />
               </div>
@@ -512,18 +522,6 @@ export default function AssetMapApp() {
 
             {viewMode === "map" && (
               <>
-                {/* Vehicle / key toggle (right edge, below the view toggle) */}
-                <div className="absolute right-4 top-[80px] z-20">
-                  <AssetTypeToggle
-                    view={view}
-                    onView={(v) => {
-                      setView(v);
-                      if (v === "vehicles") setOpenLocationId(null);
-                      if (selectedAsset && !inView(selectedAsset, v)) setSelectedAssetId(null);
-                    }}
-                  />
-                </div>
-
                 {/* Bottom-right: geofence + legend, then the map bar */}
                 <div className="pointer-events-none absolute bottom-7 right-4 z-20 flex items-end gap-4">
                   <div className="pointer-events-auto flex flex-col items-end gap-4">

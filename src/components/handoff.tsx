@@ -30,6 +30,8 @@ interface AC {
   gap?: string;
   /** Live widget shown inside the criterion. */
   live?: "zoom";
+  /** Step-by-step explanation of the mechanism, for engineers. */
+  deepDive?: { title: string; steps: string[]; bands?: Row[]; examples?: string[]; code?: string };
 }
 
 interface Ticket {
@@ -42,7 +44,6 @@ interface Ticket {
 }
 
 const JIRA = "https://ikongps.atlassian.net/browse/";
-const STATUS_LABEL: Record<Status, string> = { covered: "Covered", partial: "Partial", open: "Open" };
 
 function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
   const c = s.clusterBelowZoom;
@@ -98,15 +99,52 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
           summary: `Clusters below ${c} · pins ${c}–${i} · image cards from ${i}.`,
           design: [
             "Far out, nearby vehicles merge into clusters so the lot reads as density.",
-            `Clustering is by real distance, not pixels: vehicles within ${s.groupDistance} m of each other stay a cluster until zoom ${c} only when there are at least ${s.clusterMinPoints} of them. A car parked on its own already shows as a pin.`,
+            `Below ${c}, clusters and pins appear side by side on purpose: only dense rows (≥ ${s.clusterMinPoints} cars chained within ${s.groupDistance} m) become a count bubble; cars parked apart stay pins.`,
             `From ${c} every vehicle is its own pin; from ${i} pins become photo cards.`,
             "Keys in rooms collapse into gateways from zoom 16.",
           ],
+          deepDive: {
+            title: "How clustering decides: cluster or pin at the same zoom",
+            steps: [
+              `Two rules stack. Rule A (ours) groups by real-world distance and runs below zoom ${c}. Rule B (Mapbox) merges by screen distance and runs only below zoom ${Math.max(0, Math.floor(c - 1)) + 1}.`,
+              `Rule A, linking: any two vehicles ${s.groupDistance} m or less apart are linked, and links chain: if A–B and B–C are each ≤ ${s.groupDistance} m, A, B and C are one group even when A–C is further. (Single-linkage via a ${s.groupDistance} m spatial-hash grid + union-find, O(n).)`,
+              `Rule A, deciding: a group with ≥ ${s.clusterMinPoints} vehicles is sent to the map as ONE cluster feature at the group's centroid, weight = vehicle count. A group with fewer than ${s.clusterMinPoints} is sent as individual pins.`,
+              `Rule A is in metres, so groups don't change as you zoom between ${Math.max(0, Math.floor(c - 1)) + 1} and ${c}. They are recomputed when the zoom crosses ${c}, when data changes, and when the map stops moving.`,
+              `Rule B: the Mapbox GeoJSON source has cluster: true, clusterRadius 50 px, clusterMaxZoom ${Math.max(0, Math.floor(c - 1))}. Below zoom ${Math.max(0, Math.floor(c - 1)) + 1} it merges any features within 50 px (pins and Rule A bubbles alike) and sums their weight, so the far-out view stays tidy.`,
+              `At zoom ${c} Rule A switches off and every vehicle is sent as a pin; the cluster layers have maxzoom ${c}, so no bubble can leak past it.`,
+              `Clicking a bubble: Rule A group → frame its vehicles at zoom ≥ ${(c + 0.05).toFixed(2)} so they separate into pins. Rule B cluster → zoom to getClusterExpansionZoom() + 0.25.`,
+            ],
+            bands: [
+              [`zoom < ${Math.max(0, Math.floor(c - 1)) + 1}`, `Rule A + Rule B → mostly bubbles; a lone car far from others is still a pin`],
+              [`${Math.max(0, Math.floor(c - 1)) + 1} – ${c}`, `Rule A only → bubbles for dense rows, pins for everything else (the mixed view)`],
+              [`${c} – ${i}`, "No grouping → every vehicle is a pin"],
+              [`≥ ${i}`, "Every vehicle is an image card"],
+            ],
+            examples: [
+              `6 cars in a row, 2.75 m apart → one chained group of 6 ≥ ${s.clusterMinPoints} → bubble “6” until ${c}.`,
+              `2 cars side by side, 3 m apart → group of 2 < ${s.clusterMinPoints} → two pins, even at zoom 18.2.`,
+              `1 car parked alone → group of 1 → pin at every zoom.`,
+              `4 cars + 3 cars, 12 m apart → no link between the rows → 4 pins + 3 pins (each row < ${s.clusterMinPoints}).`,
+            ],
+            code: `// below clusterBelowZoom (${c})
+groups = groupByDistance(vehicles, ${s.groupDistance} /* m */)
+for (g of groups)
+  g.length >= ${s.clusterMinPoints}
+    ? emit({ cluster, at: centroid(g), weight: g.length })
+    : g.forEach(emitPin)
+// at or above ${c}: vehicles.forEach(emitPin)
+
+// mapbox source (merges on top, far out only)
+{ cluster: true, clusterRadius: 50,
+  clusterMaxZoom: ${Math.max(0, Math.floor(c - 1))},
+  clusterProperties: { weight: ["+", ["get", "weight"]] } }`,
+          },
           specs: [
             [`zoom < ${c}`, "Clusters (count bubble) for dense groups"],
             [`${c} ≤ zoom < ${i}`, "Map marker pins, coloured by inventory age"],
             [`zoom ≥ ${i}`, "Image cards, bottom-centre anchored"],
             ["Far-out tidy-up", `Mapbox clustering radius 50 px up to zoom ${Math.max(0, Math.floor(c - 1))} (clusterMaxZoom must be an integer)`],
+            ["Bubble", "Count = summed weight; radius 15 px (< 100), 18 px (100–999), 22 px (≥ 1000)"],
           ],
           live: "zoom",
         },
@@ -137,7 +175,7 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
       title: "Navigation from key-only map view to paired vehicle details (A-033)",
       blocks: "NG4-7768 (A-033), NG4-6631, NG4-8167",
       objective: "From any key, reach the vehicle it belongs to in one click, without memorising details or switching to the Inventory view.",
-      decision: "The vehicle opens as a side drawer over the map you're already on: no page change, and the map frames the car together with its keys.",
+      decision: "Clicking a key takes you back to the Vehicles list with the paired vehicle's details drawer open, on the same map: no page change, and the map shows the car with its keys.",
       acs: [
         {
           id: "8100-1",
@@ -146,13 +184,13 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
           summary: "Key panel rows and the key detail card show the vehicle; the map key tooltip doesn't yet.",
           design: [
             "Each row in the key panel shows the Key ID with the vehicle's Year Make Model and condition underneath.",
-            `Hovering a row opens the Key Details card: ${version === "v1" ? "key, gateway ID, status" : "key, room · floor, status, battery, last reported"}, then the paired vehicle's photo, VIN • stock and condition • price.`,
+            `Hovering a row opens the Key Details card: ${version === "v1" ? "key, room, status" : "key, room · floor, status, battery, last reported"}, then the paired vehicle's photo, VIN • stock and condition • price.`,
           ],
           specs: [
             ["Key panel", "450 px wide, left 16 / top 76 / bottom 16, radius 6, shadow 0 8 28 rgba(0,0,0,.28)"],
             ["Row", "Key ID 16 px semibold; vehicle line 14 px #666 + condition colour; last reported 12 px #8F8F8F"],
             ["Detail card", "300 px, radius 8, beside the panel (left 476 px), aligned to the hovered row"],
-            ["Version", version === "v1" ? "V1 (showing): gateway IDs, no room details; hover card drops battery & last reported" : "V2 (showing): room · floor level, battery ≥20% green / <20% red; V1 drops both"],
+            ["Version", version === "v1" ? "V1 (showing): room names, no photos or floor level, no battery; hover card drops battery & last reported" : "V2 (showing): room · floor level, battery ≥20% green / <20% red; V1 drops both"],
           ],
           gap: "The tooltip on a key tag on the map shows Key ID, last reported and address, but no vehicle. Add a Year Make Model + VIN line.",
         },
@@ -162,8 +200,8 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
           status: "covered",
           summary: "The vehicle title is the link; Key IDs and key tags are links too.",
           design: [
-            "Vehicle line in a key row: opens the vehicle and frames it with its keys.",
-            "Key ID: opens the vehicle but centres the map on that key, for when you're walking to the key.",
+            "Vehicle line in a key row: opens the vehicle's details and frames it with its keys.",
+            "Key ID (row or hover): opens the paired vehicle's details but centres the map on that key, for when you're walking to the key.",
             "Clicking a key tag on the map opens its vehicle.",
           ],
           specs: [
@@ -174,11 +212,11 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
           id: "8100-3",
           title: "Navigation & transition behavior",
           status: "covered",
-          summary: "Side drawer over the current map context.",
+          summary: "Back to the Vehicles list, vehicle details drawer open, same map.",
           design: [
-            "The Vehicle Detail drawer slides in on the left over the map; the Keys view and filters stay as they were.",
+            "The key panel closes, the list switches from Keys to Vehicles, and the Vehicle Detail drawer opens on the left over the map. Filters stay as they were.",
             "The selected vehicle switches to its image card with its 1–2 key tags, and everything else dims to 50%.",
-            "Closing the drawer returns to the key context.",
+            "Closing the drawer leaves you in the Vehicles view; the Keys tab reopens the gateway list.",
           ],
           specs: [
             ["Drawer", "400 px wide, left 16 / top 76 / bottom 16, radius 6, z-40"],
@@ -225,7 +263,14 @@ function toMarkdown(list: Ticket[]) {
       const lines = [`## [${t.key}](${JIRA}${t.key}) · ${t.title}`, "", `Blocks ${t.blocks}`, "", `**Objective:** ${t.objective}`];
       if (t.decision) lines.push("", `**Design decision:** ${t.decision}`);
       for (const ac of t.acs) {
-        lines.push("", `### ${ac.title} — ${STATUS_LABEL[ac.status]}`, "", ac.summary, "", ...ac.design.map((d) => `- ${d}`));
+        lines.push("", `### ${ac.title}`, "", ac.summary, "", ...ac.design.map((d) => `- ${d}`));
+        if (ac.deepDive) {
+          const d = ac.deepDive;
+          lines.push("", `#### ${d.title}`, "", ...d.steps.map((x, n) => `${n + 1}. ${x}`));
+          if (d.bands) lines.push("", "| Zoom | What you see |", "|---|---|", ...d.bands.map(([a, b]) => `| ${a} | ${b} |`));
+          if (d.examples) lines.push("", "**Examples**", "", ...d.examples.map((x) => `- ${x}`));
+          if (d.code) lines.push("", "```ts", d.code, "```");
+        }
         if (ac.specs?.length) lines.push("", "| Spec | Value |", "|---|---|", ...ac.specs.map(([a, b]) => `| ${a} | ${b} |`));
         if (ac.gap) lines.push("", `> **Still open:** ${ac.gap}`);
       }
@@ -234,11 +279,8 @@ function toMarkdown(list: Ticket[]) {
     .join("\n\n");
 }
 
-const countBy = (acs: AC[], st: Status) => acs.filter((a) => a.status === st).length;
-
 export function HandoffPanel({ settings, zoom, version, onClose }: { settings: DisplaySettings; zoom: number; version: AppVersion; onClose: () => void }) {
   const list = tickets(settings, version);
-  const all = list.flatMap((t) => t.acs);
   const [openTickets, setOpenTickets] = useState<Set<string>>(() => new Set([list[0].key]));
   const [openACs, setOpenACs] = useState<Set<string>>(() => new Set());
   const [copied, setCopied] = useState(false);
@@ -254,7 +296,7 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
     <aside
       aria-label="Engineering handoff"
       onKeyDown={(e) => e.key === "Escape" && onClose()}
-      className="absolute right-[72px] top-[76px] z-30 flex max-h-[calc(100%-290px)] min-h-[260px] w-[420px] flex-col overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white shadow-[0_12px_32px_rgba(0,0,0,.22)] animate-[pop-in_140ms_ease-out]"
+      className="absolute right-4 top-[76px] z-30 flex max-h-[calc(100%-290px)] min-h-[260px] w-[420px] flex-col overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white shadow-[0_12px_32px_rgba(0,0,0,.22)] animate-[pop-in_140ms_ease-out]"
     >
       <header className="flex shrink-0 items-start gap-2 border-b border-[#e8e8e8] px-4 pb-3 pt-3.5">
         <FileCode2 size={18} className="mt-0.5 shrink-0 text-brand" />
@@ -284,23 +326,9 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
         </button>
       </header>
 
-      {/* Coverage at a glance, for PMs. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[#e8e8e8] px-4 py-2 text-[12px] text-[#555]">
-        <span className="font-semibold text-[#111]">{all.length} acceptance criteria</span>
-        {(["covered", "partial", "open"] as Status[]).map((st) =>
-          countBy(all, st) ? (
-            <span key={st} className="flex items-center gap-1">
-              <StatusChip status={st} />
-              {countBy(all, st)}
-            </span>
-          ) : null,
-        )}
-      </div>
-
       <div className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] p-2.5">
         {list.map((t) => {
           const isOpen = openTickets.has(t.key);
-          const covered = countBy(t.acs, "covered");
           return (
             <section key={t.key} className="mb-2.5 overflow-hidden rounded-[8px] border border-[#dcdcdc] bg-white last:mb-0">
               {/* Ticket accordion */}
@@ -313,9 +341,7 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
                 <span className="mt-0.5 shrink-0 rounded-[4px] bg-[#e8f1fb] px-1.5 py-0.5 font-mono text-[11.5px] font-bold text-[#0b5cad]">{t.key}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[15px] font-semibold leading-snug text-[#111]">{t.title}</span>
-                  <span className="mt-1 block text-[12px] text-[#666]">
-                    {covered} of {t.acs.length} criteria covered
-                  </span>
+                  <span className="mt-1 block text-[12px] text-[#666]">{t.acs.length} acceptance criteria</span>
                 </span>
                 <ChevronDown size={18} className={`mt-0.5 shrink-0 text-[#666] transition-transform ${isOpen ? "rotate-180" : ""}`} />
               </button>
@@ -350,7 +376,6 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
                               <span className="block text-[13px] font-semibold leading-snug text-[#111]">{ac.title}</span>
                               <span className="mt-0.5 block text-[12px] leading-snug text-[#555]">{ac.summary}</span>
                             </span>
-                            <StatusChip status={ac.status} />
                             <ChevronDown size={14} className={`mt-0.5 shrink-0 text-[#888] transition-transform ${acOpen ? "rotate-180" : ""}`} />
                           </button>
 
@@ -364,6 +389,8 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
                               </ul>
 
                               {ac.live === "zoom" && <LiveZoom settings={settings} zoom={zoom} />}
+
+                              {ac.deepDive && <DeepDive {...ac.deepDive} />}
 
                               {ac.specs && (
                                 <>
@@ -405,14 +432,59 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
   );
 }
 
-function StatusChip({ status }: { status: Status }) {
-  const cls = status === "covered" ? "bg-[#e3f5ef] text-[#126550]" : status === "partial" ? "bg-[#fbefc9] text-[#8a6a06]" : "bg-[#fde8e8] text-[#B10F2E]";
-  return <span className={`mt-px shrink-0 rounded-full px-1.5 py-px text-[10.5px] font-bold uppercase tracking-[0.6px] ${cls}`}>{STATUS_LABEL[status]}</span>;
+/** Engineer-facing explanation of a mechanism: numbered steps, zoom bands, examples, pseudo-code. */
+function DeepDive({ title, steps, bands, examples, code }: NonNullable<AC["deepDive"]>) {
+  return (
+    <div className="mt-2.5 rounded-[6px] border border-[#cfe0ec] bg-[#f4f9fc] px-2.5 py-2">
+      <p className="text-[12.5px] font-semibold text-[#0B4F75]">{title}</p>
+      <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-[12px] leading-snug text-[#222] marker:font-semibold marker:text-[#0B6494]">
+        {steps.map((x) => (
+          <li key={x}>{x}</li>
+        ))}
+      </ol>
+      {bands && (
+        <>
+          <p className="mt-2.5 text-[11px] font-bold uppercase tracking-[1.1px] text-[#5d7d92]">By zoom</p>
+          <dl className="mt-1 divide-y divide-[#e3edf4] rounded-[6px] border border-[#dbe7ef] bg-white">
+            {bands.map(([a, b]) => (
+              <div key={a} className="grid grid-cols-[96px_1fr] gap-2 px-2 py-1.5">
+                <dt className="font-mono text-[11px] leading-snug text-[#0B6494]">{a}</dt>
+                <dd className="text-[12px] leading-snug text-[#222]">{b}</dd>
+              </div>
+            ))}
+          </dl>
+        </>
+      )}
+      {examples && (
+        <>
+          <p className="mt-2.5 text-[11px] font-bold uppercase tracking-[1.1px] text-[#5d7d92]">Examples</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-[12px] leading-snug text-[#222] marker:text-[#9bb5c6]">
+            {examples.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {code && (
+        <>
+          <p className="mt-2.5 text-[11px] font-bold uppercase tracking-[1.1px] text-[#5d7d92]">Pseudo-code</p>
+          <pre className="mt-1 overflow-x-auto rounded-[6px] bg-[#16222b] px-2.5 py-2 font-mono text-[11px] leading-[1.45] text-[#d7e6ef]">{code}</pre>
+        </>
+      )}
+    </div>
+  );
 }
 
 /** Live readout inside the zoom criterion: current zoom against the tier thresholds. */
 function LiveZoom({ settings, zoom }: { settings: DisplaySettings; zoom: number }) {
-  const tier = zoom >= settings.imageFromZoom ? "Image cards" : zoom < settings.clusterBelowZoom ? "Clusters" : "Map pins";
+  const tier = zoom >= settings.imageFromZoom ? "Image cards" : zoom < settings.clusterBelowZoom ? "Clusters + pins" : "Map pins";
+  const pixelMergeBelow = Math.max(0, Math.floor(settings.clusterBelowZoom - 1)) + 1;
+  const rules =
+    zoom >= settings.clusterBelowZoom
+      ? "No grouping: every vehicle is drawn individually"
+      : zoom < pixelMergeBelow
+        ? `Rule A (≥ ${settings.clusterMinPoints} within ${settings.groupDistance} m) + Rule B (Mapbox 50 px merge)`
+        : `Rule A only (≥ ${settings.clusterMinPoints} within ${settings.groupDistance} m); Mapbox merge is off`;
   return (
     <div className="mt-2.5 rounded-[6px] border border-[#ececec] px-2.5 py-2">
       <div className="flex items-center justify-between text-[12px]">
@@ -422,6 +494,10 @@ function LiveZoom({ settings, zoom }: { settings: DisplaySettings; zoom: number 
         <span className="rounded-full bg-brand-50 px-2 py-0.5 font-semibold text-brand">Showing: {tier}</span>
       </div>
       <TierBar settings={settings} zoom={zoom} />
+      <p className="mt-1.5 text-[11.5px] leading-snug text-[#555]">
+        <span className="font-semibold text-[#111]">Active rules: </span>
+        {rules}
+      </p>
     </div>
   );
 }

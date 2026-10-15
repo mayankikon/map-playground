@@ -87,7 +87,7 @@ export function NavRail({ version, onVersion }: { version: AppVersion; onVersion
 }
 
 const VERSIONS: { id: AppVersion; label: string; hint: string }[] = [
-  { id: "v1", label: "V1", hint: "Gateway IDs, no room photos" },
+  { id: "v1", label: "V1", hint: "Room names only: no photos, floor or battery" },
   { id: "v2", label: "V2", hint: "Named rooms with photos (current)" },
 ];
 
