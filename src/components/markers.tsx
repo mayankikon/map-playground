@@ -188,9 +188,9 @@ function KeyPreview({ asset }: { asset: Asset }) {
 
 /** Key tag battery level: icon + percentage, red when low. */
 export function KeyBattery({ pct, className = "" }: { pct: number; className?: string }) {
-  // V1 has no key tag battery anywhere.
+  // V0 and V1 have no key tag battery anywhere.
   const version = useVersion();
-  if (version === "v1") return null;
+  if (version !== "v2") return null;
   const Icon = pct < 20 ? BatteryLow : pct < 60 ? BatteryMedium : BatteryFull;
   const low = pct < 20;
   return (
