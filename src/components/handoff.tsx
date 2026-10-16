@@ -193,8 +193,8 @@ const CHANGES: Change[] = [
     detail: "The VEHICLES / KEYS tabs in the list panel are the only view switch. Leaving Keys closes the open key panel.",
   },
   {
-    title: "V1 vs V2 (prototype versions)",
-    detail: "V2 is the target. V1 keeps real room names but drops room photos, the photo edit icon, floor level and key battery; its key hover card has no Battery / Last reported block.",
+    title: "V0 / V1 / V2 (prototype versions)",
+    detail: "V2 is the target. V1 keeps real room names but drops room photos, the photo edit icon, floor level and key battery; its key hover card has no Battery / Last reported block. V0 has no gateway concept at all: the Keys tab is one flat list of every key tag (key tag icon, Key ID, battery, last reported, paired vehicle + stock type), no rooms or In Lot / Off Lot buckets, no stock type filter, and the map shows every key as its own tag (no gateway markers). In V0 a key row, a key tag on the map or a Key ID picked in search opens the paired vehicle.",
   },
 ];
 
@@ -349,7 +349,7 @@ for (g of groups)
             ["Detail card", "300 px, radius 8, beside the panel (left 476 px), aligned to the hovered row"],
             ["Header photo (V2)", "4:3, same as the vehicle drawer gallery (400 × 300); pencil top-left to replace it"],
             ["Stock type colour", "New #1A9375 · Preowned #E64B17 · Loaner #6B4FBB · Demo #0B6494 · Service #A86A00 · BVA #5B6770"],
-            ["Version", version === "v1" ? "V1 (showing): room names, no photos or floor level, no battery; hover card drops battery & last reported" : "V2 (showing): room · floor level, battery ≥20% green / <20% red; V1 drops both"],
+            ["Version", version === "v0" ? "V0 (showing): no gateways — flat list of every key tag, no stock filter, every key its own tag on the map" : version === "v1" ? "V1 (showing): room names, no photos or floor level, no battery; hover card drops battery & last reported" : "V2 (showing): room · floor level, battery ≥20% green / <20% red; V1 drops both; V0 has no gateways"],
           ],
         },
         {
@@ -435,7 +435,7 @@ function toBuildPrompt(list: Ticket[], version: AppVersion) {
     `- Tickets: ${JIRA}NG4-8068 (pin overlap) and ${JIRA}NG4-8100 (key → paired vehicle navigation).`,
     `- Approved prototype, the source of truth for behaviour and visuals: ${PROTOTYPE_URL}`,
     `- Prototype source (reference only): ${REPO_URL}`,
-    `- Target version: V2${version === "v1" ? " (the prototype is currently showing V1; still build V2 unless the PM says otherwise)" : ""}.`,
+    `- Target version: V2${version !== "v2" ? ` (the prototype is currently showing ${version.toUpperCase()}; still build V2 unless the PM says otherwise)` : ""}.`,
     "- Mocked in the prototype, wire to real data: key battery %, key last-reported time, room floor level, vehicle specs / CARFAX / safety.",
     "",
     "## How to apply",
@@ -635,7 +635,7 @@ export function HandoffPanel({ settings, zoom, version, onClose }: { settings: D
         <AlsoInBuild />
 
         <p className="mt-2.5 px-1 text-[11.5px] leading-snug text-[#888]">
-          Prototype notes: key battery %, last reported time and vehicle specs / CARFAX / safety are mocked (deterministic from ids). Switch V1 / V2 at the bottom of the nav rail.
+          Prototype notes: key battery %, last reported time and vehicle specs / CARFAX / safety are mocked (deterministic from ids). Switch V0 / V1 / V2 at the bottom of the nav rail.
         </p>
       </div>
     </aside>

@@ -87,6 +87,7 @@ export function NavRail({ version, onVersion }: { version: AppVersion; onVersion
 }
 
 const VERSIONS: { id: AppVersion; label: string }[] = [
+  { id: "v0", label: "V0" },
   { id: "v1", label: "V1" },
   { id: "v2", label: "V2" },
 ];
@@ -101,7 +102,7 @@ function VersionSelect({ version, onVersion }: { version: AppVersion; onVersion:
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
-  const current = VERSIONS.find((v) => v.id === version) ?? VERSIONS[1];
+  const current = VERSIONS.find((v) => v.id === version) ?? VERSIONS[VERSIONS.length - 1];
   return (
     <div ref={ref} className="relative mx-2 mb-3" onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
       {open && (

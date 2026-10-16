@@ -10,7 +10,7 @@ import { SearchBox } from "./search";
 import { VehicleLookupContext, VersionContext } from "./version";
 import AssetDetail from "./AssetDetail";
 import { GroupKeysOverlay, RoomKeysOverlay } from "./focus";
-import { HubMarkers, KeyLocationPanel, KeysTab, buildLocations } from "./keyHubs";
+import { HubMarkers, KeyLocationPanel, KeysFlatList, KeysTab, buildLocations } from "./keyHubs";
 import VehicleDetailPanel from "./vehicleDetail";
 import { batteryLow, EMPTY_FILTERS, FilterBar, GeofenceSelect, Legend, MapBar, NavRail, TopBar, VehicleListPanel, applyFilters, type Filters } from "./toolbox";
 import { DEFAULT_SETTINGS, INITIAL_VIEW, TYPE_BY_ID, inView, isLngLat, normalizeSettings } from "@/lib/catalog";
@@ -100,6 +100,7 @@ export default function AssetMapApp() {
   const [version, setVersion] = useState<AppVersion>("v2");
   const changeVersion = (v: AppVersion) => {
     setVersion(v);
+    if (v === "v0") setOpenLocationId(null);
     try {
       localStorage.setItem(VERSION_KEY, v);
     } catch {
@@ -169,7 +170,8 @@ export default function AssetMapApp() {
     setSettings(saved?.settingsVersion === SETTINGS_VERSION ? normalizeSettings(saved.settings) : DEFAULT_SETTINGS);
     try {
       if (localStorage.getItem(HANDOFF_KEY) === "closed") setHandoffOpen(false);
-      if (localStorage.getItem(VERSION_KEY) === "v1") setVersion("v1");
+      const savedVersion = localStorage.getItem(VERSION_KEY);
+      if (savedVersion === "v0" || savedVersion === "v1") setVersion(savedVersion);
     } catch {
       /* storage unavailable */
     }
@@ -295,7 +297,8 @@ export default function AssetMapApp() {
   }, [assets, filters]);
   // From HUB_ZOOM, keys stored in a key location are drawn as that location's marker, not one by
   // one; zoomed further out they simply count toward the clusters.
-  const hubsVisible = zoom >= HUB_ZOOM;
+  // V0 has no gateways: room keys always stay individual tags.
+  const hubsVisible = version !== "v0" && zoom >= HUB_ZOOM;
   const openGroupKeyIds = useMemo(() => {
     const loc = openLocationId?.startsWith("group:") ? keysByLocation(assets, geofences).get(openLocationId) : undefined;
     return new Set((loc ?? []).map((k) => k.id));
@@ -318,6 +321,7 @@ export default function AssetMapApp() {
   const openLocation = locations.find((l) => l.id === openLocationId) ?? null;
   const listTab = view === "keys" ? "keys" : "vehicles";
   const showKeys = view !== "vehicles";
+  const allKeys = useMemo(() => applyFilters(assets.filter((a) => a.typeId === "key"), filters, ""), [assets, filters]);
 
   const selectedIsVehicle = !!selectedAsset && TYPE_BY_ID[selectedAsset.typeId]?.kind === "vehicle";
   const pairedKeys = useMemo(() => {
@@ -418,6 +422,13 @@ export default function AssetMapApp() {
     if (!frameVehicleWithKeys(v.id)) fly({ kind: "point", center: v.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5) });
   };
 
+  // V0: flat list of every key tag; V1 / V2: rooms (gateways) and In Lot / Off Lot buckets.
+  const keysContent =
+    version === "v0" ? (
+      <KeysFlatList keys={allKeys} vehicleById={vehicleById} selectedId={selectedAssetId} onOpenKey={(id) => openKeyVehicle(id)} />
+    ) : (
+      <KeysTab locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />
+    );
   const isSatellite = settings.mapStyle === "satellite";
   const placingType = mode.kind === "place" ? TYPE_BY_ID[mode.typeId] : null;
 
@@ -448,7 +459,7 @@ export default function AssetMapApp() {
               vehicles={assets.filter((a) => a.typeId.startsWith("vehicle"))}
               keys={assets.filter((a) => a.typeId === "key")}
               onPickVehicle={openVehicleFromSearch}
-              onPickKey={openKeyTag}
+              onPickKey={version === "v0" ? openKeyVehicle : openKeyTag}
             />
           }
         />
@@ -463,7 +474,7 @@ export default function AssetMapApp() {
               onCollapse={() => setListOpen(false)}
               tab={listTab}
               onTab={changeView}
-              keysContent={<KeysTab locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />}
+              keysContent={keysContent}
             />
           )}
 
@@ -528,7 +539,7 @@ export default function AssetMapApp() {
                   full
                   tab={listTab}
                   onTab={changeView}
-                  keysContent={<KeysTab locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />}
+                  keysContent={keysContent}
                 />
               </div>
             )}

@@ -135,6 +135,71 @@ export function KeysTab({ locations, selectedId, onOpen }: { locations: KeyLocat
   );
 }
 
+/* ---------------- V0: flat keys list (no gateways) ---------------- */
+
+/**
+ * V0 Keys tab: every key tag is its own row, no rooms / buckets and no stock type filter.
+ * Clicking a row opens the paired vehicle (map centred on the key), like everywhere else.
+ */
+export function KeysFlatList({
+  keys,
+  vehicleById,
+  selectedId,
+  onOpenKey,
+}: {
+  keys: Asset[];
+  vehicleById: Map<string, Asset>;
+  selectedId: string | null;
+  onOpenKey: (keyId: string) => void;
+}) {
+  const sorted = [...keys].sort((a, b) => (a.code ?? "").localeCompare(b.code ?? ""));
+  return (
+    <>
+      <p className="shrink-0 px-4 pb-1 pt-3 text-[16px] text-[#666]">
+        Showing {keys.length.toLocaleString("en-US")} key{keys.length === 1 ? "" : "s"}
+      </p>
+      <ul className="min-h-0 flex-1 overflow-y-auto bg-white">
+        {sorted.map((k) => {
+          const v = k.vehicleId ? vehicleById.get(k.vehicleId) : undefined;
+          const info = keyInfo(k);
+          return (
+            <li key={k.id} className="border-b border-[#e8e8e8]">
+              <button
+                type="button"
+                onClick={() => onOpenKey(k.id)}
+                aria-label={`${assetTitle(k)}: ${v ? `open ${vehicleLine(v)}` : "unpaired key"}`}
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left ${k.id === selectedId ? "bg-[#e5e5e5]" : "hover:bg-[#f4f4f4]"}`}
+              >
+                {/* Small key tag, as on the map */}
+                <span className="grid size-10 shrink-0 place-items-center rounded-[6px] border-2 border-[#336c8b] bg-[#17a5e6] text-white shadow-[0_2px_3px_rgba(0,0,0,.2)]">
+                  <KeyRound size={18} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="text-[16px] font-semibold text-[#111]">{assetTitle(k)}</span>
+                    <KeyBattery pct={info.batteryPct} />
+                    <span className="ml-auto shrink-0 text-[12px] text-[#8f8f8f]">{ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</span>
+                  </span>
+                  <span className="block truncate text-[14px] text-[#666]">
+                    {vehicleLine(v)}
+                    {v?.condition && (
+                      <>
+                        {" · "}
+                        <span style={{ color: CONDITION_COLOR[v.condition] }}>{v.condition}</span>
+                      </>
+                    )}
+                  </span>
+                </span>
+                <ChevronRight size={16} className="shrink-0 text-[#666]" />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
 /* ---------------- Location detail panel ---------------- */
 
 /** Hover card beside the room panel: the key and the vehicle it's paired to. */

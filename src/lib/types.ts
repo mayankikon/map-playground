@@ -95,5 +95,8 @@ export function zoomTier(zoom: number, s: DisplaySettings): ZoomTier {
   return "markers";
 }
 
-/** Prototype version: V2 is the current design; V1 is the earlier, gateway-only key panel. */
-export type AppVersion = "v1" | "v2";
+/**
+ * Prototype version. V2 is the current design; V1 is the reduced gateway key panel;
+ * V0 has no gateways at all: every key tag is its own row in the Keys list and its own tag on the map.
+ */
+export type AppVersion = "v0" | "v1" | "v2";
