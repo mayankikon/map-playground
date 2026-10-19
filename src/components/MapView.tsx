@@ -41,8 +41,8 @@ interface Props {
 }
 
 /** 50% opacity on every regular marker layer; hover and click still work. */
-/** Dimmed (everything but the focus): 65% opacity and 10% less saturation. */
-export const DIM_OPACITY = 0.65;
+/** Dimmed (everything but the focus): 52% opacity and 10% less saturation. */
+export const DIM_OPACITY = 0.52;
 const DIM_SATURATION = 0.9;
 const dimmedMaps = new WeakSet<MbMap>();
 
