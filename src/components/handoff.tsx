@@ -119,9 +119,11 @@ const COMPONENTS: Change[] = [
   },
   {
     title: "Cluster bubble",
-    detail: "Count of vehicles (see NG4-8068 AC3 for when one forms).",
+    detail: "Count of vehicles (see NG4-8068 AC3 for when one forms). Number only: zoomed all the way out there is no building / group icon, even for the bubble over the dealership building.",
     specs: [
       ["Default", "white fill, 1.5 px stroke #DCDCDC, shadow (black 22%, blur .5, y +4); count DIN Pro Bold 15"],
+      ["Content", "The count only. No building / group icon at any zoom — the DS Map Marker “Group” style (building glyph) is not used; a cluster over the building reads as a plain number"],
+      ["Keys view", "Below zoom 16 keys stored in rooms count into the same number-only bubbles; from zoom 16 they become gateway markers (V1 / V2). V0 never shows gateways"],
       ["Size", "radius 15 px (< 100), 18 px (100–999), 22 px (≥ 1000)"],
       ["Hover", "fill #F1FFFA, stroke #99A3AD, ring #48A991 at 40% (radius + 10)"],
       ["Dimmed", "opacity 0.52, shadow 0.114"],
@@ -261,6 +263,7 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
             `Below ${c}, clusters and pins appear side by side on purpose: only dense rows (≥ ${s.clusterMinPoints} cars chained within ${s.groupDistance} m) become a count bubble; cars parked apart stay pins.`,
             `From ${c} every vehicle is its own pin; from ${i} pins become photo cards.`,
             "Keys in rooms collapse into gateways from zoom 16.",
+            "Zoomed all the way out, a cluster is a number only — no building / group icon, even over the dealership building. The building itself is never a marker below zoom 16.",
           ],
           deepDive: {
             title: "How clustering decides: cluster or pin at the same zoom",
@@ -274,7 +277,7 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
               `Clicking a bubble: Rule A group → frame its vehicles at zoom ≥ ${(c + 0.05).toFixed(2)} so they separate into pins. Rule B cluster → zoom to getClusterExpansionZoom() + 0.25.`,
             ],
             bands: [
-              [`zoom < ${Math.max(0, Math.floor(c - 1)) + 1}`, `Rule A + Rule B → mostly bubbles; a lone car far from others is still a pin`],
+              [`zoom < ${Math.max(0, Math.floor(c - 1)) + 1}`, `Rule A + Rule B → mostly bubbles (count only, no building / group icon — including over the dealership building); a lone car far from others is still a pin`],
               [`${Math.max(0, Math.floor(c - 1)) + 1} – ${c}`, `Rule A only → bubbles for dense rows, pins for everything else (the mixed view)`],
               [`${c} – ${i}`, "No grouping → every vehicle is a pin"],
               [`≥ ${i}`, "Every vehicle is an image card"],
