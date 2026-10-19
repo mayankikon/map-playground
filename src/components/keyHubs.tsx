@@ -8,7 +8,7 @@ import { KeyBattery, PreviewShell } from "./markers";
 import { useVersion } from "./version";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
 import { KEY_GROUPS, KEY_HUBS, type KeyHub, type KeyLocationId } from "@/lib/hubs";
-import { STOCK_COLOR, assetTitle } from "@/lib/catalog";
+import { STOCK_COLOR, assetTitle, fmtLatLng } from "@/lib/catalog";
 import { STOCK_TYPES, type AppVersion, type Asset, type Condition } from "@/lib/types";
 
 /* ---------------- Shared bits ---------------- */
@@ -135,6 +135,16 @@ export function KeysTab({ locations, selectedId, onOpen }: { locations: KeyLocat
   );
 }
 
+/** A key's position as lat, long under its row (all versions). */
+function LatLng({ position }: { position: [number, number] }) {
+  return (
+    <span className="mt-0.5 flex items-center gap-1 text-[12px] tabular-nums text-[#8f8f8f]">
+      <MapPin size={12} strokeWidth={2} aria-hidden />
+      {fmtLatLng(position)}
+    </span>
+  );
+}
+
 /* ---------------- V0: flat keys list (no gateways) ---------------- */
 
 /**
@@ -185,6 +195,7 @@ export function KeysFlatList({
                       </>
                     )}
                   </span>
+                  <LatLng position={k.position} />
                 </span>
                 <ChevronRight size={16} className="shrink-0 text-[#666]" />
               </button>
@@ -238,6 +249,10 @@ function KeyDetailsCard({ k, vehicle, location, top }: { k: Asset; vehicle?: Ass
         </div>
       </dl>
       )}
+      <div className="mt-3 border-t border-[#eee] pt-3">
+        <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">Lat / Long</p>
+        <p className="mt-0.5 text-[13px] font-semibold tabular-nums text-[#111]">{fmtLatLng(k.position)}</p>
+      </div>
       <div className="mt-3 border-t border-[#eee] pt-3">
         <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">Paired vehicle</p>
         {vehicle ? (
@@ -453,6 +468,7 @@ export function KeyLocationPanel({
                 ) : (
                   <span className="block text-[14px] text-[#8f8f8f]">{vehicleLine(v)}</span>
                 )}
+                  <LatLng position={k.position} />
               </span>
               <button
                 type="button"

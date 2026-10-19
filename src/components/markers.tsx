@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- map markers are plain DOM images */
 "use client";
 
-import { FIGMA, STOCK_COLOR, TYPE_BY_ID, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog";
+import { FIGMA, STOCK_COLOR, TYPE_BY_ID, assetTitle, fmtLatLng, fmtMiles, fmtMoney } from "@/lib/catalog";
 import type { Asset, InventoryAge } from "@/lib/types";
 import { BatteryFull, BatteryLow, BatteryMedium } from "lucide-react";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
@@ -181,6 +181,7 @@ function KeyPreview({ asset }: { asset: Asset }) {
         <Sub>Not paired to a vehicle</Sub>
       )}
       <Sub>Last reported: {ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</Sub>
+      <Sub className="tabular-nums">Lat / Long: {fmtLatLng(asset.position)}</Sub>
       {v && <p className="mt-1.5 text-[12px] font-semibold text-[#007cbe]">Click to open vehicle</p>}
     </PreviewShell>
   );

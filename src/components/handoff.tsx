@@ -72,7 +72,7 @@ const COMPONENTS: Change[] = [
     title: "Key tooltip (map hover)",
     detail: "Card above the hovered key tag.",
     specs: [
-      ["Content", "Key ID (+ battery in V2) · paired vehicle Year Make Model (14 px semibold) · VIN · Last reported · “Click to open vehicle” (#007CBE)"],
+      ["Content", "Key ID (+ battery in V2) · paired vehicle Year Make Model (14 px semibold) · VIN · Last reported · Lat / Long · “Click to open vehicle” (#007CBE)"],
       ["Unpaired", "“Not paired to a vehicle”, no CTA"],
       ["Shell", "white card, radius 8, shadow; caret centred under the card, no divider"],
     ],
@@ -92,7 +92,7 @@ const COMPONENTS: Change[] = [
     title: "Key panel row",
     detail: "One row per key in the open gateway / bucket.",
     specs: [
-      ["Content", "Key ID 16 px semibold · battery (V2) · last reported 12 px #8F8F8F right · vehicle line 14 px #666 + stock type colour · chevron"],
+      ["Content", "Key ID 16 px semibold · battery (V2) · last reported 12 px #8F8F8F right · vehicle line 14 px #666 + stock type colour · lat, long 12 px #8F8F8F with pin icon · chevron"],
       ["Default / hover / selected", "#FFFFFF / #F4F4F4 / #E5E5E5"],
       ["Hover", "opens the Key Details card beside the panel; its map tag goes active, others dim"],
       ["Click", "whole row = Key ID: paired vehicle drawer, map centred on the key; vehicle line = vehicle framed with its keys"],
@@ -102,8 +102,9 @@ const COMPONENTS: Change[] = [
     title: "Key Details card (row hover)",
     detail: "300 px card at left 476 px, top aligned to the hovered row.",
     specs: [
-      ["V2", "Key ID · room · floor · Online badge │ Battery · Last reported │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price)"],
-      ["V1", "Key ID · room · Online badge │ Paired vehicle (no battery / last reported block)"],
+      ["V2", "Key ID · room · floor · Online badge │ Battery · Last reported │ Lat / Long │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price)"],
+      ["V1", "Key ID · room · Online badge │ Lat / Long │ Paired vehicle (no battery / last reported block)"],
+      ["Lat / Long", "“32.92470, -97.06905”: latitude first, 5 decimals (≈ 1 m), tabular figures — shown in V0, V1 and V2"],
       ["Unpaired", "“Not paired to a vehicle.”"],
     ],
   },
@@ -177,6 +178,11 @@ const CHANGES: Change[] = [
     ],
   },
   {
+    title: "Key lat / long (V0, V1, V2)",
+    detail: "Every key shows its position as “lat, long” (latitude first, 5 decimals ≈ 1 m): under each key row (V0 Keys list, V1 / V2 key panel), in the Key Details card (V1 / V2), and in the key tooltip on the map.",
+    specs: [["Format", "32.92470, -97.06905 · 12 px #8F8F8F with a 12 px pin icon in rows; 13 px SemiBold #111 under “LAT / LONG” in the Key Details card; tooltip line “Lat / Long: …”"]],
+  },
+  {
     title: "Stock types",
     detail: "Vehicles can be New, Preowned, Loaner, Demo, Service or BVA. Every stock type control (map Stock Type filter, key panel filter, edit form) lists all six; each type has its own text colour.",
   },
@@ -194,7 +200,7 @@ const CHANGES: Change[] = [
   },
   {
     title: "V0 / V1 / V2 (prototype versions)",
-    detail: "V2 is the target. V1 keeps real room names but drops room photos, the photo edit icon, floor level and key battery; its key hover card has no Battery / Last reported block. V0 has no gateway concept at all: the Keys tab is one flat list of every key tag (Key ID, last reported, paired vehicle + stock type; no icon, no battery), no rooms or In Lot / Off Lot buckets, no stock type filter, and the map shows every key as its own tag (no gateway markers). In V0 a key row, a key tag on the map or a Key ID picked in search opens the paired vehicle.",
+    detail: "V2 is the target. V1 keeps real room names but drops room photos, the photo edit icon, floor level and key battery; its key hover card has no Battery / Last reported block. V0 has no gateway concept at all: the Keys tab is one flat list of every key tag (Key ID, last reported, paired vehicle + stock type, lat / long; no icon, no battery), no rooms or In Lot / Off Lot buckets, no stock type filter, and the map shows every key as its own tag (no gateway markers). In V0 a key row, a key tag on the map or a Key ID picked in search opens the paired vehicle.",
   },
 ];
 
@@ -340,12 +346,12 @@ for (g of groups)
           design: [
             "Each row in the key panel shows the Key ID with the vehicle's Year Make Model and stock type underneath.",
             "The panel's stock type filter always offers every type: All Stock Types, New, Preowned, Loaner, Demo, Service, BVA.",
-            "Hovering any key tag on the map shows a tooltip: Key ID (+ battery in V2), paired vehicle Year Make Model and VIN, last reported, and “Click to open vehicle”.",
-            `Hovering a row opens the Key Details card: ${version === "v1" ? "key, room, status" : "key, room · floor, status, battery, last reported"}, then the paired vehicle's photo, VIN • stock and condition • price.`,
+            "Hovering any key tag on the map shows a tooltip: Key ID (+ battery in V2), paired vehicle Year Make Model and VIN, last reported, lat / long, and “Click to open vehicle”.",
+            `Hovering a row opens the Key Details card: ${version === "v1" ? "key, room, status, lat / long" : "key, room · floor, status, battery, last reported, lat / long"}, then the paired vehicle's photo, VIN • stock and condition • price.`,
           ],
           specs: [
             ["Key panel", "450 px wide, left 16 / top 76 / bottom 16, radius 6, shadow 0 8 28 rgba(0,0,0,.28)"],
-            ["Row", "Key ID 16 px semibold; vehicle line 14 px #666 + condition colour; last reported 12 px #8F8F8F"],
+            ["Row", "Key ID 16 px semibold; vehicle line 14 px #666 + condition colour; last reported 12 px #8F8F8F; lat, long 12 px #8F8F8F"],
             ["Detail card", "300 px, radius 8, beside the panel (left 476 px), aligned to the hovered row"],
             ["Header photo (V2)", "4:3, same as the vehicle drawer gallery (400 × 300); pencil top-left to replace it"],
             ["Stock type colour", "New #1A9375 · Preowned #E64B17 · Loaner #6B4FBB · Demo #0B6494 · Service #A86A00 · BVA #5B6770"],
