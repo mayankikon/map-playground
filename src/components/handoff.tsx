@@ -92,9 +92,9 @@ const COMPONENTS: Change[] = [
     title: "Key panel row",
     detail: "One row per key in the open gateway / bucket.",
     specs: [
-      ["Content", "Key ID 16 px semibold · battery (V2) · last reported 12 px #8F8F8F right · vehicle line 14 px #666 + stock type colour · lat, long 12 px #8F8F8F with pin icon · chevron"],
+      ["Content", "Key ID 16 px semibold · battery (V2) · lat, long 12 px #8F8F8F with pin icon, right-aligned (replaces the report time) · vehicle line 14 px #666 + stock type colour · chevron"],
       ["Default / hover / selected", "#FFFFFF / #F4F4F4 / #E5E5E5"],
-      ["Hover", "opens the Key Details card beside the panel; its map tag goes active, others dim"],
+      ["Hover", "opens the Key Details card beside the panel (V0: beside the Keys list); its map tag goes active, others dim (V0: the key's tag is drawn on top and the map pans to it if it is off-screen)"],
       ["Click", "whole row = Key ID: paired vehicle drawer, map centred on the key; vehicle line = vehicle framed with its keys"],
     ],
   },
@@ -179,8 +179,8 @@ const CHANGES: Change[] = [
   },
   {
     title: "Key lat / long (V0, V1, V2)",
-    detail: "Every key shows its position as “lat, long” (latitude first, 5 decimals ≈ 1 m): under each key row (V0 Keys list, V1 / V2 key panel), in the Key Details card (V1 / V2), and in the key tooltip on the map.",
-    specs: [["Format", "32.92470, -97.06905 · 12 px #8F8F8F with a 12 px pin icon in rows; 13 px SemiBold #111 under “LAT / LONG” in the Key Details card; tooltip line “Lat / Long: …”"]],
+    detail: "Every key shows its position as “lat, long” (latitude first, 5 decimals ≈ 1 m): right-aligned in each key row where the report time used to be (V0 Keys list, V1 / V2 key panel — rows no longer show the time), in the Key Details card (V0 / V1 / V2), and in the key tooltip on the map.",
+    specs: [["Format", "32.92470, -97.06905 · 12 px #8F8F8F with a 12 px pin icon, right-aligned in rows; 13 px SemiBold #111 under “LAT / LONG” in the Key Details card; tooltip line “Lat / Long: …”"]],
   },
   {
     title: "Stock types",
@@ -200,7 +200,7 @@ const CHANGES: Change[] = [
   },
   {
     title: "V0 / V1 / V2 (prototype versions)",
-    detail: "V2 is the target. V1 keeps real room names but drops room photos, the photo edit icon, floor level and key battery; its key hover card has no Battery / Last reported block. V0 has no gateway concept at all: the Keys tab is one flat list of every key tag (Key ID, last reported, paired vehicle + stock type, lat / long; no icon, no battery), no rooms or In Lot / Off Lot buckets, no stock type filter, and the map shows every key as its own tag (no gateway markers). In V0 a key row, a key tag on the map or a Key ID picked in search opens the paired vehicle.",
+    detail: "V2 is the target. V1 keeps real room names but drops room photos, the photo edit icon, floor level and key battery; its key hover card has no Battery / Last reported block. V0 has no gateway concept at all: the Keys tab is one flat list of every key tag (Key ID, lat / long, paired vehicle + stock type; no icon, no battery, no report time), no rooms or In Lot / Off Lot buckets, no stock type filter, and the map shows every key as its own tag (no gateway markers). Hovering a V0 row shows the Key Details card (Key ID, status, lat / long, paired vehicle) and that key's tag on the dimmed map; a key row, a key tag on the map or a Key ID picked in search opens the paired vehicle.",
   },
 ];
 
@@ -351,7 +351,7 @@ for (g of groups)
           ],
           specs: [
             ["Key panel", "450 px wide, left 16 / top 76 / bottom 16, radius 6, shadow 0 8 28 rgba(0,0,0,.28)"],
-            ["Row", "Key ID 16 px semibold; vehicle line 14 px #666 + condition colour; last reported 12 px #8F8F8F; lat, long 12 px #8F8F8F"],
+            ["Row", "Key ID 16 px semibold; lat, long 12 px #8F8F8F right-aligned (no report time); vehicle line 14 px #666 + condition colour"],
             ["Detail card", "300 px, radius 8, beside the panel (left 476 px), aligned to the hovered row"],
             ["Header photo (V2)", "4:3, same as the vehicle drawer gallery (400 × 300); pencil top-left to replace it"],
             ["Stock type colour", "New #1A9375 · Preowned #E64B17 · Loaner #6B4FBB · Demo #0B6494 · Service #A86A00 · BVA #5B6770"],

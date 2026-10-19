@@ -122,6 +122,8 @@ export default function AssetMapApp() {
   const [hoveredRoomKeyId, setHoveredRoomKeyId] = useState<string | null>(null);
   /** Key picked from search: its tag and row stay highlighted while its room is open. */
   const [focusKeyId, setFocusKeyId] = useState<string | null>(null);
+  /** V0: key row hovered in the flat Keys list — its tag is shown on the map, the rest dims. */
+  const [listHoverKeyId, setListHoverKeyId] = useState<string | null>(null);
   const [roomImages, setRoomImages] = useState<Record<string, string>>({});
   /** Vehicle whose editable card is open next to its details page ("Edit details"). */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -304,8 +306,8 @@ export default function AssetMapApp() {
     return new Set((loc ?? []).map((k) => k.id));
   }, [openLocationId, assets, geofences]);
   const mapAssets = useMemo(
-    () => shownAssets.filter((a) => !(hubsVisible && a.typeId === "key" && a.hubId) && !openGroupKeyIds.has(a.id)),
-    [shownAssets, hubsVisible, openGroupKeyIds],
+    () => shownAssets.filter((a) => !(hubsVisible && a.typeId === "key" && a.hubId) && !openGroupKeyIds.has(a.id) && a.id !== listHoverKeyId),
+    [shownAssets, hubsVisible, openGroupKeyIds, listHoverKeyId],
   );
   const vehicleById = useMemo(() => new Map(assets.filter((a) => a.typeId.startsWith("vehicle")).map((a) => [a.id, a])), [assets]);
   const locations = useMemo(() => buildLocations(keysByLocation(assets, geofences), roomImages, version), [assets, geofences, roomImages, version]);
@@ -321,6 +323,7 @@ export default function AssetMapApp() {
   const openLocation = locations.find((l) => l.id === openLocationId) ?? null;
   const listTab = view === "keys" ? "keys" : "vehicles";
   const showKeys = view !== "vehicles";
+  const listHoverKey = listHoverKeyId ? assets.find((a) => a.id === listHoverKeyId) : undefined;
   const allKeys = useMemo(() => applyFilters(assets.filter((a) => a.typeId === "key"), filters, ""), [assets, filters]);
 
   const selectedIsVehicle = !!selectedAsset && TYPE_BY_ID[selectedAsset.typeId]?.kind === "vehicle";
@@ -425,7 +428,22 @@ export default function AssetMapApp() {
   // V0: flat list of every key tag; V1 / V2: rooms (gateways) and In Lot / Off Lot buckets.
   const keysContent =
     version === "v0" ? (
-      <KeysFlatList keys={allKeys} vehicleById={vehicleById} selectedId={selectedAssetId} onOpenKey={(id) => openKeyVehicle(id)} />
+      <KeysFlatList
+        keys={allKeys}
+        vehicleById={vehicleById}
+        selectedId={selectedAssetId}
+        onOpenKey={(id) => {
+          setListHoverKeyId(null);
+          openKeyVehicle(id);
+        }}
+        onHoverKey={(id) => {
+          setListHoverKeyId(id);
+          // Bring the key into view if it's off-screen (no zoom change).
+          const k = id ? assets.find((a) => a.id === id) : undefined;
+          const m = mapRef.current;
+          if (k && m && !m.getBounds()?.contains(k.position)) m.easeTo({ center: k.position, duration: 500 });
+        }}
+      />
     ) : (
       <KeysTab locations={locations} selectedId={openLocationId} onOpen={openKeyLocation} />
     );
@@ -507,7 +525,7 @@ export default function AssetMapApp() {
                 onZoom={setZoom}
                 focusVehicle={selectedIsVehicle ? selectedAsset : null}
                 focusKeys={focusKeys}
-                dim={!!openLocation && showKeys && viewMode === "map"}
+                dim={(!!openLocation && showKeys && viewMode === "map") || (version === "v0" && !!listHoverKeyId)}
                 onReady={(m) => {
                   mapRef.current = m;
                   setMapObj(m);
@@ -568,6 +586,11 @@ export default function AssetMapApp() {
                 // In Lot / Off Lot: each key tag where the key actually is.
                 <GroupKeysOverlay map={mapObj} keys={openLocation.keys} highlightId={hoveredRoomKeyId ?? focusKeyId} onOpenKey={openKeyVehicle} />
               )
+            )}
+
+            {/* V0: the hovered list key, drawn as an active tag above the dimmed map. */}
+            {viewMode === "map" && mapObj && version === "v0" && listHoverKey && (
+              <GroupKeysOverlay map={mapObj} keys={[listHoverKey]} highlightId={listHoverKey.id} onOpenKey={openKeyVehicle} />
             )}
 
             {viewMode === "map" && mapObj && showKeys && hubsVisible && (

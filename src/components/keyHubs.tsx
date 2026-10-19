@@ -135,10 +135,10 @@ export function KeysTab({ locations, selectedId, onOpen }: { locations: KeyLocat
   );
 }
 
-/** A key's position as lat, long under its row (all versions). */
+/** A key's position as lat, long — right-hand slot of its row, where the report time used to be (all versions). */
 function LatLng({ position }: { position: [number, number] }) {
   return (
-    <span className="mt-0.5 flex items-center gap-1 text-[12px] tabular-nums text-[#8f8f8f]">
+    <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] tabular-nums text-[#8f8f8f]">
       <MapPin size={12} strokeWidth={2} aria-hidden />
       {fmtLatLng(position)}
     </span>
@@ -157,24 +157,44 @@ export function KeysFlatList({
   vehicleById,
   selectedId,
   onOpenKey,
+  onHoverKey,
 }: {
   keys: Asset[];
   vehicleById: Map<string, Asset>;
   selectedId: string | null;
   onOpenKey: (keyId: string) => void;
+  /** Row hovered (null on leave): the map shows that key's tag and dims the rest. */
+  onHoverKey?: (keyId: string | null) => void;
 }) {
   const sorted = [...keys].sort((a, b) => (a.code ?? "").localeCompare(b.code ?? ""));
+  const [hovered, setHovered] = useState<{ id: string; left: number; top: number } | null>(null);
+  const hoveredKey = hovered ? keys.find((k) => k.id === hovered.id) : undefined;
   return (
     <>
       <p className="shrink-0 px-4 pb-1 pt-3 text-[16px] text-[#666]">
         Showing {keys.length.toLocaleString("en-US")} key{keys.length === 1 ? "" : "s"}
       </p>
-      <ul className="min-h-0 flex-1 overflow-y-auto bg-white">
+      <ul
+        className="min-h-0 flex-1 overflow-y-auto bg-white"
+        onMouseLeave={() => {
+          setHovered(null);
+          onHoverKey?.(null);
+        }}
+        onScroll={() => setHovered(null)}
+      >
         {sorted.map((k) => {
           const v = k.vehicleId ? vehicleById.get(k.vehicleId) : undefined;
-          const info = keyInfo(k);
           return (
-            <li key={k.id} className="border-b border-[#e8e8e8]">
+            <li
+              key={k.id}
+              className="border-b border-[#e8e8e8]"
+              onMouseEnter={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                // Card sits just right of the list, top aligned to the row (clamped to the viewport).
+                setHovered({ id: k.id, left: r.right + 12, top: Math.min(r.top - 8, window.innerHeight - 330) });
+                onHoverKey?.(k.id);
+              }}
+            >
               <button
                 type="button"
                 onClick={() => onOpenKey(k.id)}
@@ -184,7 +204,7 @@ export function KeysFlatList({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="text-[16px] font-semibold text-[#111]">{assetTitle(k)}</span>
-                    <span className="ml-auto shrink-0 text-[12px] text-[#8f8f8f]">{ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</span>
+                    <LatLng position={k.position} />
                   </span>
                   <span className="block truncate text-[14px] text-[#666]">
                     {vehicleLine(v)}
@@ -195,7 +215,6 @@ export function KeysFlatList({
                       </>
                     )}
                   </span>
-                  <LatLng position={k.position} />
                 </span>
                 <ChevronRight size={16} className="shrink-0 text-[#666]" />
               </button>
@@ -203,6 +222,9 @@ export function KeysFlatList({
           );
         })}
       </ul>
+      {hoveredKey && hovered && (
+        <KeyDetailsCard k={hoveredKey} vehicle={hoveredKey.vehicleId ? vehicleById.get(hoveredKey.vehicleId) : undefined} fixed={{ left: hovered.left, top: hovered.top }} />
+      )}
     </>
   );
 }
@@ -210,16 +232,21 @@ export function KeysFlatList({
 /* ---------------- Location detail panel ---------------- */
 
 /** Hover card beside the room panel: the key and the vehicle it's paired to. */
-function KeyDetailsCard({ k, vehicle, location, top }: { k: Asset; vehicle?: Asset; location: KeyLocation; top: number }) {
-  const online = location.hub?.online ?? true;
+/**
+ * Key hover card. In the key panel (V1 / V2) it sits beside the panel at `top`; in the V0 list,
+ * which has no rooms, it is positioned `fixed` beside the list and shows no room line.
+ */
+function KeyDetailsCard({ k, vehicle, location, top, fixed }: { k: Asset; vehicle?: Asset; location?: KeyLocation; top?: number; fixed?: { left: number; top: number } }) {
+  const online = location?.hub?.online ?? k.reporting;
   const info = keyInfo(k);
-  // V1: no battery / last reported block — the key, its gateway and its vehicle.
-  const v1 = useVersion() === "v1";
+  // V0 / V1: no battery / last reported block — the key, its position and its vehicle.
+  const version = useVersion();
+  const v1 = version !== "v2";
   return (
     <div
       role="tooltip"
-      style={{ top }}
-      className="pointer-events-none absolute left-[476px] z-40 w-[300px] rounded-[8px] bg-white p-4 shadow-[0_8px_28px_rgba(0,0,0,.24)] ring-1 ring-[#dcdcdc] animate-[pop-in_120ms_ease-out]"
+      style={fixed ? { left: fixed.left, top: fixed.top } : { top }}
+      className={`pointer-events-none ${fixed ? "fixed" : "absolute left-[476px]"} z-[60] w-[300px] rounded-[8px] bg-white p-4 shadow-[0_8px_28px_rgba(0,0,0,.24)] ring-1 ring-[#dcdcdc] animate-[pop-in_120ms_ease-out]`}
     >
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-[6px] border-2 border-[#336c8b] bg-[#17a5e6] text-white">
@@ -227,11 +254,13 @@ function KeyDetailsCard({ k, vehicle, location, top }: { k: Asset; vehicle?: Ass
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[16px] font-semibold text-[#111]">{assetTitle(k)}</p>
-          {/* V1: room name; V2: room · floor level. */}
-          <p className="text-[12px] text-[#666]">
-            {location.name}
-            {floorOf(location) && ` · ${floorOf(location)}`}
-          </p>
+          {/* V1: room name; V2: room · floor level; V0: no room. */}
+          {location && (
+            <p className="text-[12px] text-[#666]">
+              {location.name}
+              {floorOf(location) && ` · ${floorOf(location)}`}
+            </p>
+          )}
         </div>
         <OnlineBadge online={online} />
       </div>
@@ -445,7 +474,7 @@ export function KeyLocationPanel({
                     {assetTitle(k)}
                   </button>
                   <KeyBattery pct={keyInfo(k).batteryPct} />
-                  <span className="ml-auto shrink-0 text-[12px] text-[#8f8f8f]">{ago(keyInfo(k).reportedMinutesAgo).replace(/^Updated /, "")}</span>
+                  <LatLng position={k.position} />
                 </span>
                 {v ? (
                   <button
@@ -468,7 +497,6 @@ export function KeyLocationPanel({
                 ) : (
                   <span className="block text-[14px] text-[#8f8f8f]">{vehicleLine(v)}</span>
                 )}
-                  <LatLng position={k.position} />
               </span>
               <button
                 type="button"
