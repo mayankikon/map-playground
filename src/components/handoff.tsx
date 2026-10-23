@@ -81,7 +81,7 @@ function components(version: AppVersion): Change[] {
     title: "Key tooltip (map hover)",
     detail: "Card above the hovered key tag.",
     specs: [
-      ["Content", `Key ID${v2 ? " + battery" : ""} · paired vehicle Year Make Model (14 px semibold) · VIN · Last reported · Lat / Long · “Click to open vehicle” (#007CBE)`],
+      ["Content", v0 ? "Key ID · paired vehicle VIN · Last reported · Lat / Long (no vehicle name, no click hint)" : `Key ID${v2 ? " + battery" : ""} · paired vehicle Year Make Model (14 px semibold) · VIN · Last reported · Lat / Long · “Click to open vehicle” (#007CBE)`],
       ["Unpaired", "“Not paired to a vehicle”, no CTA"],
       ["Shell", "white card, radius 8, shadow; caret centred under the card, no divider"],
     ],
@@ -206,6 +206,18 @@ function components(version: AppVersion): Change[] {
 function changes(version: AppVersion): Change[] {
   const v0 = version === "v0";
   return [
+    ...(v0
+      ? ([
+          {
+            title: "V0 key tooltip and vehicle drawer key rows",
+            detail: "The map key tooltip drops the vehicle name and the “Click to open vehicle” hint (clicking still opens the vehicle). In the vehicle drawer's Location section, each paired key row is titled with its Key ID instead of a room name.",
+            specs: [
+              ["Tooltip", "Key ID · VIN · Last reported · Lat / Long"],
+              ["Drawer key row", "title “Key ID: 433434”, subtitle “Updated N minutes ago”, locate button"],
+            ],
+          },
+        ] as Change[])
+      : []),
     {
       title: "Search vehicles and keys (relates to NG4-6631)",
       detail: `Top-bar typeahead. Vehicles match on Year Make Model and VIN; keys match on Key ID. Every typed word must match; matched text is semibold. Results grouped Vehicles / Keys (6 each), neutral grey hover. Picking a vehicle opens its drawer (Vehicles tab) framed with its keys; picking a key ${v0 ? "opens its paired vehicle with the map centred on the key" : "opens its room / bucket, keeps that tag at full strength (others dimmed) and scrolls its row into view"}. ↑ ↓ Enter Esc.`,
@@ -442,7 +454,8 @@ for (g of groups)
           ? [
               "Each Keys list row shows the Key ID, its lat / long, and the vehicle's Year Make Model and stock type underneath. No key icon, battery or report time.",
               "Hovering a row opens the Key Details card beside the list: key, status, lat / long, then the paired vehicle's photo, VIN • stock and stock type • price. The key's tag is shown on the dimmed map.",
-              "Hovering any key tag on the map shows a tooltip: Key ID, paired vehicle Year Make Model and VIN, last reported, lat / long, and “Click to open vehicle”.",
+              "Hovering any key tag on the map shows a tooltip: Key ID, paired vehicle VIN, last reported and lat / long (no vehicle name, no “Click to open vehicle” hint). Clicking still opens the paired vehicle.",
+              "Vehicle details → Location: each paired key row is titled with its Key ID (e.g. “Key ID: 433434”) instead of a room name.",
               "In the Keys view, hovering a key tag on the map keeps that tag at full strength and dims every other marker, cluster and image card to 0.52 / 0.9; leaving the tag restores them.",
             ]
           : [

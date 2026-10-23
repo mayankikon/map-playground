@@ -164,6 +164,8 @@ function KeyPreview({ asset }: { asset: Asset }) {
   const vehicles = useVehicleLookup();
   const v = asset.vehicleId ? vehicles.get(asset.vehicleId) : undefined;
   const info = keyInfo(asset);
+  // V0: no vehicle name or "Click to open vehicle" hint, just the key and its paired VIN.
+  const v0 = useVersion() === "v0";
   return (
     <PreviewShell>
       <div className="flex items-center gap-2">
@@ -172,9 +174,11 @@ function KeyPreview({ asset }: { asset: Asset }) {
       </div>
       {v ? (
         <>
-          <p className="mt-1 truncate text-[14px] font-semibold text-[#333]">
-            {v.year} {v.make} {v.model}
-          </p>
+          {!v0 && (
+            <p className="mt-1 truncate text-[14px] font-semibold text-[#333]">
+              {v.year} {v.make} {v.model}
+            </p>
+          )}
           <Sub>{v.vin}</Sub>
         </>
       ) : (
@@ -182,7 +186,7 @@ function KeyPreview({ asset }: { asset: Asset }) {
       )}
       <Sub>Last reported: {ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</Sub>
       <Sub className="tabular-nums">Lat / Long: {fmtLatLng(asset.position)}</Sub>
-      {v && <p className="mt-1.5 text-[12px] font-semibold text-[#007cbe]">Click to open vehicle</p>}
+      {v && !v0 && <p className="mt-1.5 text-[12px] font-semibold text-[#007cbe]">Click to open vehicle</p>}
     </PreviewShell>
   );
 }

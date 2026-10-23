@@ -6,6 +6,7 @@ import { Pencil, Route, Trash2 } from "lucide-react";
 
 import { FIGMA, assetTitle, fmtMiles, fmtMoney } from "@/lib/catalog";
 import { ago, vehicleInfo, vehiclePhotos } from "@/lib/vehicleInfo";
+import { useVersion } from "./version";
 import type { Asset, Geofence, LngLat } from "@/lib/types";
 
 /*
@@ -146,6 +147,7 @@ function Gallery({ vehicle, onClose }: { vehicle: Asset; onClose: () => void }) 
 
 export default function VehicleDetailPanel({ vehicle: v, geofences, keys, batteryLow, onClose, onFly, onUpdate, onEdit, onDelete }: Props) {
   const info = useMemo(() => vehicleInfo(v, batteryLow), [v, batteryLow]);
+  const version = useVersion();
   const [tab, setTab] = useState<"info" | "trips">("info");
   const [remarkDraft, setRemarkDraft] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -286,7 +288,7 @@ export default function VehicleDetailPanel({ vehicle: v, geofences, keys, batter
                 onLocate={() => onFly(v.position)}
               />
               {keys.map(({ key, locationName, position }, n) => (
-                <LocationRow key={key.id} icon="loc-key.svg" title={locationName} subtitle={ago(n === 0 ? 23 : 60 * (n + 3))} onLocate={() => onFly(position)} />
+                <LocationRow key={key.id} icon="loc-key.svg" title={version === "v0" ? assetTitle(key) : locationName} subtitle={ago(n === 0 ? 23 : 60 * (n + 3))} onLocate={() => onFly(position)} />
               ))}
               {keys.length === 0 && <p className="py-4 text-[14px] text-[#8f8f8f]">No key paired to this vehicle.</p>}
             </div>
