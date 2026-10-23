@@ -38,6 +38,8 @@ interface Props {
   focusKeys?: Asset[];
   /** Dim every regular marker to 50% (e.g. while a key room is open). */
   dim?: boolean;
+  /** V0 Keys view: hovering a key marker dims every other marker, the hovered key stays full. */
+  dimOnKeyHover?: boolean;
 }
 
 /** 50% opacity on every regular marker layer; hover and click still work. */
@@ -45,6 +47,18 @@ interface Props {
 export const DIM_OPACITY = 0.52;
 const DIM_SATURATION = 0.9;
 const dimmedMaps = new WeakSet<MbMap>();
+
+/** Dim every pin and cluster except one asset (the hovered key), which keeps its hover icon. */
+function applyDimExcept(map: MbMap, id: string) {
+  if (!map.getLayer("asset-pins")) return;
+  const isIt: mapboxgl.ExpressionSpecification = ["==", ["get", "id"], id];
+  map.setLayoutProperty("asset-pins", "icon-image", ["case", isIt, ["get", "iconHover"], pinIconExpr(null, true)]);
+  map.setPaintProperty("asset-pins", "icon-opacity", ["case", isIt, 1, DIM_OPACITY]);
+  map.setPaintProperty("clusters", "circle-opacity", DIM_OPACITY);
+  map.setPaintProperty("clusters", "circle-stroke-opacity", DIM_OPACITY);
+  map.setPaintProperty("cluster-count", "text-opacity", DIM_OPACITY);
+  map.setPaintProperty("cluster-shadow", "circle-opacity", 0.22 * DIM_OPACITY);
+}
 
 function applyDim(map: MbMap, dim: boolean) {
   if (!map.getLayer("asset-pins")) return;
@@ -819,6 +833,19 @@ export default function MapView(props: Props) {
     applyDim(map, dimmed);
     markersRef.current.forEach(({ el }) => el.classList.toggle("is-dim", dimmed));
   }, [map, focusId, focusKeyIds, dimmed]);
+
+  /* V0 Keys view: hovering a key dims everything else; leaving restores the focus / dim state */
+  const keyHoverId =
+    props.dimOnKeyHover && hover?.kind === "asset" && TYPE_BY_ID[assets.find((a) => a.id === hover.id)?.typeId ?? ""]?.kind === "key" ? hover.id : null;
+  useEffect(() => {
+    if (!map?.getLayer("asset-pins")) return;
+    if (keyHoverId) applyDimExcept(map, keyHoverId);
+    else {
+      applyDim(map, dimmed);
+      map.setLayoutProperty("asset-pins", "icon-image", pinIconExpr(hoverRef.current?.kind === "asset" ? hoverRef.current.id : null, dimmed));
+    }
+    markersRef.current.forEach(({ el }, id) => el.classList.toggle("is-dim", keyHoverId ? id !== keyHoverId : dimmed));
+  }, [map, keyHoverId, dimmed]);
 
   /* Drop from the sidebar palette */
   const onDrop = (e: React.DragEvent) => {

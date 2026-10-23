@@ -70,7 +70,7 @@ function components(version: AppVersion): Change[] {
     specs: [
       ["Size", v0 ? "48 px frame, 32 px tag" : "48 px frame, 32 px tag; 85% (27 px tag) when scattered round a gateway"],
       ["Default", "fill #17A5E6, 2 px border #336C8B, radius 4, shadow 0 4 4 rgba(0,0,0,.25), inset 0 0 12 rgba(0,0,0,.15)"],
-      ["Hover", "halo #336C8B at 40% (radius 14) + key tooltip above"],
+      ["Hover", v0 ? "halo #336C8B at 40% (radius 14) + key tooltip above; in the Keys view every other marker, cluster and image card dims to 0.52 / 0.9 until the pointer leaves" : "halo #336C8B at 40% (radius 14) + key tooltip above"],
       ["Active", v0 ? "same halo, kept on: the row hovered in the Keys list (drawn above the dimmed map)" : "same halo, kept on: hovered row in the key panel, or the key picked from search; other tags dim"],
       ["Dimmed", "opacity 0.52 + saturate(0.9)"],
       ...(v0 ? ([["Stacking", "Keys stored in the same room sit on top of each other from zoom 18.6 — V0 has no aggregation for them (the overlap V1 / V2 solve with gateways)"]] as Row[]) : []),
@@ -228,7 +228,7 @@ function changes(version: AppVersion): Change[] {
     },
     {
       title: "Softer dimming (52%)",
-      detail: `Everything but the focus dims to opacity 0.52 (80% of the earlier 0.65) and saturation 0.9: other ${v0 ? "markers while a Keys list row is hovered" : "key tags while a key is hovered"}, and every other pin, cluster and image card while a vehicle is selected.`,
+      detail: `Everything but the focus dims to opacity 0.52 (80% of the earlier 0.65) and saturation 0.9: other ${v0 ? "markers while a Keys list row or a key tag on the map (Keys view) is hovered" : "key tags while a key is hovered"}, and every other pin, cluster and image card while a vehicle is selected.`,
     },
     {
       title: "Collapsed list button shows totals",
@@ -417,7 +417,7 @@ for (g of groups)
           "Hover: tooltip card above the marker plus a soft halo; still works on dimmed markers.",
           "Selected: the vehicle always renders as its image card (any zoom) with its 1–2 key tags; everything else is dimmed to 52% opacity and 90% saturation.",
           v0
-            ? "Keys list row hover: the Key Details card opens beside the list and that key's tag is drawn above the dimmed map (0.52 / 0.9), panning to it if off-screen."
+            ? "Keys list row hover: the Key Details card opens beside the list and that key's tag is drawn above the dimmed map (0.52 / 0.9), panning to it if off-screen. Map key-tag hover (Keys view): the hovered tag stays full, everything else dims the same way."
             : "Expanded / collapsed: a gateway opens into its key panel + tags and closes with ✕ or Esc. Hovering a key dims the other tags the same way.",
         ],
         specs: [["Selected camera", "fitBounds(vehicle + keys), padding T150 B60 L460 R90, maxZoom 19.5"], ...dimSpecs],
@@ -443,6 +443,7 @@ for (g of groups)
               "Each Keys list row shows the Key ID, its lat / long, and the vehicle's Year Make Model and stock type underneath. No key icon, battery or report time.",
               "Hovering a row opens the Key Details card beside the list: key, status, lat / long, then the paired vehicle's photo, VIN • stock and stock type • price. The key's tag is shown on the dimmed map.",
               "Hovering any key tag on the map shows a tooltip: Key ID, paired vehicle Year Make Model and VIN, last reported, lat / long, and “Click to open vehicle”.",
+              "In the Keys view, hovering a key tag on the map keeps that tag at full strength and dims every other marker, cluster and image card to 0.52 / 0.9; leaving the tag restores them.",
             ]
           : [
               "Each row in the key panel shows the Key ID and its lat / long, with the vehicle's Year Make Model and stock type underneath.",

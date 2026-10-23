@@ -526,6 +526,7 @@ export default function AssetMapApp() {
                 focusVehicle={selectedIsVehicle ? selectedAsset : null}
                 focusKeys={focusKeys}
                 dim={(!!openLocation && showKeys && viewMode === "map") || (version === "v0" && !!listHoverKeyId)}
+                dimOnKeyHover={version === "v0" && showKeys}
                 onReady={(m) => {
                   mapRef.current = m;
                   setMapObj(m);
