@@ -130,8 +130,8 @@ function components(version: AppVersion): Change[] {
         v0
           ? "Key ID │ Address · Lat / Long │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price). No room, no online / offline badge, no Battery / Last reported block"
           : v2
-            ? "Key ID · room · floor · Online badge │ Battery · Last reported │ Gateway or Address · Lat / Long │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price)"
-            : "Key ID · room · Online badge │ Gateway or Address · Lat / Long │ Paired vehicle (no Battery / Last reported block)",
+            ? "Key ID · room · floor (no Online badge) │ Battery · Last reported │ Gateway or Address · Lat / Long │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price)"
+            : "Key ID · room (no Online badge) │ Gateway or Address · Lat / Long │ Paired vehicle (no Battery / Last reported block)",
       ],
       ["Lat / Long", "“32.925, -97.069”: latitude first, 3 decimals max, tabular figures"],
       ["Pointer", "stays open while the pointer moves from the row onto it (200 ms grace); closes when it leaves both"],
@@ -240,6 +240,10 @@ function changes(version: AppVersion): Change[] {
       detail: v0
         ? "Vehicles can be New, Preowned, Loaner, Demo, Service or BVA. The map Stock Type filter and the edit form list all six; each type has its own text colour. The V0 Keys list has no stock type filter."
         : "Vehicles can be New, Preowned, Loaner, Demo, Service or BVA. Every stock type control (map Stock Type filter, key panel filter, edit form) lists all six; each type has its own text colour.",
+    },
+    {
+      title: "No Online badge on keys",
+      detail: "The Key Details card (the expanded key tooltip) no longer shows the Online / Offline badge in any version. Gateways keep theirs.",
     },
     {
       title: "List button rides on the vehicle drawer",

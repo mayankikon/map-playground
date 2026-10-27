@@ -327,8 +327,6 @@ function KeyDetailsCard({
             </p>
           )}
         </div>
-        {/* V0: no online / offline status. */}
-        {version !== "v0" && <OnlineBadge online={online} />}
       </div>
       {!v1 && (
       <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-[#eee] pt-3">
