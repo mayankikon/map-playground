@@ -8,7 +8,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 import { FIGMA, GEOFENCE_COLOR, INITIAL_VIEW, TYPE_BY_ID, normalizeSettings, styleUrl } from "@/lib/catalog";
-import { centroid, closeRing, groupByDistance } from "@/lib/geo";
+import { centroid, closeRing } from "@/lib/geo";
 import type { Asset, DisplaySettings, FlyTarget, Geofence, LngLat, Mode, ZoomTier } from "@/lib/types";
 import { AssetMarker, AssetPreview } from "./markers";
 import { FocusOverlay } from "./focus";
@@ -43,8 +43,8 @@ interface Props {
 }
 
 /** 50% opacity on every regular marker layer; hover and click still work. */
-/** Dimmed (everything but the focus): 52% opacity and 10% less saturation. */
-export const DIM_OPACITY = 0.52;
+/** Dimmed (everything but the focus): 42% opacity and 10% less saturation. */
+export const DIM_OPACITY = 0.42;
 const DIM_SATURATION = 0.9;
 const dimmedMaps = new WeakSet<MbMap>();
 
@@ -83,7 +83,7 @@ const LAYERS = [
   "cluster-ring", "cluster-shadow", "clusters", "cluster-count",
   "asset-pins",
 ];
-const SOURCES = ["geofences", "draft", "assets"];
+const SOURCES = ["geofences", "draft", "assets", "asset-clusters"];
 const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] };
 const BRAND = GEOFENCE_COLOR;
 
@@ -105,44 +105,20 @@ function previewOffset(a: Asset, tier: ZoomTier) {
 
 /* ---------- GeoJSON builders ---------- */
 
-type Grouping = { meters: number; min: number } | null;
-
-/**
- * With `grouping`, assets packed within `meters` of each other (and at least `min` of them)
- * collapse into one group bubble; everything else stays an individual marker.
- * Group member positions are written to `groupsOut` so a click can zoom to them.
- */
-function assetsFC(
-  assets: Asset[],
-  selectedId: string | null,
-  drag: { id: string; pos: LngLat } | null,
-  grouping: Grouping,
-  groupsOut: Map<string, LngLat[]>,
-): FeatureCollection {
-  groupsOut.clear();
+/** Every asset as a point feature (pins and the cluster source share this data). */
+function assetsFC(assets: Asset[], selectedId: string | null, drag: { id: string; pos: LngLat } | null): FeatureCollection {
   const placed = drag ? assets.map((a) => (a.id === drag.id ? { ...a, position: drag.pos } : a)) : assets;
-  const marker = (a: Asset): Feature => {
-    const p = pinIcon(a);
-    return {
-      type: "Feature",
-      geometry: { type: "Point", coordinates: a.position },
-      properties: { id: a.id, weight: 1, icon: p.icon, iconHover: `${p.icon}-hover`, anchor: p.anchor, offset: p.offset, selected: a.id === selectedId },
-    };
+  return {
+    type: "FeatureCollection",
+    features: placed.map((a): Feature => {
+      const p = pinIcon(a);
+      return {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: a.position },
+        properties: { id: a.id, weight: 1, icon: p.icon, iconHover: `${p.icon}-hover`, anchor: p.anchor, offset: p.offset, selected: a.id === selectedId },
+      };
+    }),
   };
-  if (!grouping) return { type: "FeatureCollection", features: placed.map(marker) };
-
-  const features: Feature[] = [];
-  groupByDistance(placed, grouping.meters).forEach((g, i) => {
-    if (g.length < grouping.min) {
-      g.forEach((a) => features.push(marker(a)));
-      return;
-    }
-    const gid = `g${i}`;
-    const points = g.map((a) => a.position);
-    groupsOut.set(gid, points);
-    features.push({ type: "Feature", geometry: { type: "Point", coordinates: centroid(points) }, properties: { gid, weight: g.length } });
-  });
-  return { type: "FeatureCollection", features };
 }
 
 function geofencesFC(geofences: Geofence[], selectedId: string | null): FeatureCollection {
@@ -283,10 +259,11 @@ function pinIconExpr(hoverId: string | null, dim = false): mapboxgl.ExpressionSp
   return dim ? ["concat", icon, "-dim"] : icon;
 }
 
-type BubbleKey = { clusterId?: number | string; gid?: string } | null;
+/** Hovered bubble: a cluster (by cluster id) or a lone asset drawn as a “1” bubble (by asset id). */
+type BubbleKey = { clusterId?: number | string; assetId?: string } | null;
 
 function bubbleHoverExpr(key: BubbleKey): mapboxgl.ExpressionSpecification {
-  return ["any", ["==", ["id"], key?.clusterId ?? -1], ["==", ["get", "gid"], key?.gid ?? ""]];
+  return ["any", ["==", ["id"], key?.clusterId ?? -1], ["==", ["get", "id"], key?.assetId ?? ""]];
 }
 
 function applyBubbleHover(map: MbMap, key: BubbleKey) {
@@ -303,20 +280,22 @@ function installLayers(map: MbMap, s: DisplaySettings) {
 
   map.addSource("geofences", { type: "geojson", data: EMPTY });
   map.addSource("draft", { type: "geojson", data: EMPTY });
-  map.addSource("assets", {
+  // Two sources with the same data, one per zoom tier, so the switch happens exactly at
+  // clusterBelowZoom (supercluster itself only switches on whole zooms):
+  // - "asset-clusters": everything clustered (50 px), drawn only below clusterBelowZoom;
+  //   a lone asset there is drawn as a “1” bubble, never as a pin.
+  // - "assets": plain points, drawn as pins from clusterBelowZoom (image cards from imageFromZoom).
+  map.addSource("asset-clusters", {
     type: "geojson",
     data: EMPTY,
-    // Distance groups (built in assetsFC) decide what stays a number up close; this
-    // pixel clustering only tidies things up when zoomed far out.
     cluster: true,
-    // Tile all the way down so zooms past clusterMaxZoom get unclustered data
-    // (the default maxzoom of 18 would stretch zoom-18 clusters past the threshold).
     maxzoom: 22,
-    // Must be a whole zoom: supercluster indexes integer zooms only (18.6 would match none).
-    clusterMaxZoom: Math.max(0, Math.floor(s.clusterBelowZoom - 1)),
+    clusterMaxZoom: 22,
     clusterRadius: 50,
     clusterProperties: { weight: ["+", ["get", "weight"]] },
   });
+  map.addSource("assets", { type: "geojson", data: EMPTY, maxzoom: 22 });
+
 
   const area = ["==", ["get", "kind"], "area"] as mapboxgl.FilterSpecification;
   // Figma "Geofence Boundary": rgba(11,100,148,.3) fill with a 2px white stroke
@@ -350,20 +329,18 @@ function installLayers(map: MbMap, s: DisplaySettings) {
   });
 
   // Figma "Vehicle Cluster": white 32px disc, #DCDCDC stroke, #126550 count; hover adds a #48A991 ring
-  // Map clusters and distance groups both draw as the Figma "Vehicle Cluster" bubble.
-  const clustered = ["any", ["has", "point_count"], ["has", "gid"]] as mapboxgl.FilterSpecification;
   const hovered = bubbleHoverExpr(null);
   const r = ["step", ["get", "weight"], 15, 100, 18, 1000, 22] as mapboxgl.ExpressionSpecification;
   map.addLayer({
-    id: "cluster-ring", type: "circle", source: "assets", maxzoom: s.clusterBelowZoom, filter: clustered,
+    id: "cluster-ring", type: "circle", source: "asset-clusters", maxzoom: s.clusterBelowZoom,
     paint: { "circle-radius": ["+", r, 10], "circle-color": "#48A991", "circle-opacity": ["case", hovered, 0.4, 0] },
   });
   map.addLayer({
-    id: "cluster-shadow", type: "circle", source: "assets", maxzoom: s.clusterBelowZoom, filter: clustered,
+    id: "cluster-shadow", type: "circle", source: "asset-clusters", maxzoom: s.clusterBelowZoom,
     paint: { "circle-radius": ["+", r, 2], "circle-color": "#000", "circle-opacity": 0.22, "circle-blur": 0.5, "circle-translate": [0, 4] },
   });
   map.addLayer({
-    id: "clusters", type: "circle", source: "assets", maxzoom: s.clusterBelowZoom, filter: clustered,
+    id: "clusters", type: "circle", source: "asset-clusters", maxzoom: s.clusterBelowZoom,
     paint: {
       "circle-radius": r,
       "circle-color": ["case", hovered, "#F1FFFA", "#FFFFFF"],
@@ -372,14 +349,13 @@ function installLayers(map: MbMap, s: DisplaySettings) {
     },
   });
   map.addLayer({
-    id: "cluster-count", type: "symbol", source: "assets", maxzoom: s.clusterBelowZoom, filter: clustered,
+    id: "cluster-count", type: "symbol", source: "asset-clusters", maxzoom: s.clusterBelowZoom,
     layout: { "text-field": ["to-string", ["get", "weight"]], "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"], "text-size": 15, "text-allow-overlap": true },
     paint: { "text-color": "#126550" },
   });
 
   map.addLayer({
-    id: "asset-pins", type: "symbol", source: "assets", maxzoom: s.imageFromZoom,
-    filter: ["all", ["!", ["has", "point_count"]], ["!", ["has", "gid"]]],
+    id: "asset-pins", type: "symbol", source: "assets", minzoom: s.clusterBelowZoom, maxzoom: s.imageFromZoom,
     layout: {
       "icon-image": pinIconExpr(null),
       "icon-anchor": ["get", "anchor"],
@@ -443,8 +419,6 @@ export default function MapView(props: Props) {
   const justDraggedRef = useRef(0);
   const hoverRef = useRef<Hover>(null);
   const bubbleHoverRef = useRef<BubbleKey>(null);
-  const groupsRef = useRef(new Map<string, LngLat[]>());
-  const groupedRef = useRef(false);
   const markersRef = useRef(new Map<string, { marker: Marker; el: HTMLDivElement }>());
 
   const [map, setMap] = useState<MbMap | null>(null);
@@ -471,21 +445,19 @@ export default function MapView(props: Props) {
 
   const setBubbleHover = (m: MbMap, key: BubbleKey) => {
     const prev = bubbleHoverRef.current;
-    if (prev?.clusterId === key?.clusterId && prev?.gid === key?.gid) return;
+    if (prev?.clusterId === key?.clusterId && prev?.assetId === key?.assetId) return;
     bubbleHoverRef.current = key;
     applyBubbleHover(m, key);
   };
 
   const pushAssets = (m: MbMap) => {
     const P = latest.current;
-    const s = normalizeSettings(P.settings);
-    // Distance groups apply only below the cluster zoom; past it every asset is individual.
-    groupedRef.current = m.getZoom() < s.clusterBelowZoom;
-    const grouping: Grouping = groupedRef.current ? { meters: s.groupDistance, min: s.clusterMinPoints } : null;
     // The focused vehicle and its keys are drawn by the focus overlay instead.
     const hidden = new Set([P.focusVehicle?.id, ...(P.focusKeys ?? []).map((k) => k.id)]);
     const shown = hidden.size > 1 || P.focusVehicle ? P.assets.filter((a) => !hidden.has(a.id)) : P.assets;
-    (m.getSource("assets") as GeoJSONSource | undefined)?.setData(assetsFC(shown, P.selectedAssetId, dragRef.current, grouping, groupsRef.current));
+    const fc = assetsFC(shown, P.selectedAssetId, dragRef.current);
+    (m.getSource("assets") as GeoJSONSource | undefined)?.setData(fc);
+    (m.getSource("asset-clusters") as GeoJSONSource | undefined)?.setData(fc);
   };
 
   const pushGeofences = (m: MbMap) => {
@@ -549,7 +521,6 @@ export default function MapView(props: Props) {
         const z = m.getZoom();
         setZoom(z);
         latest.current.onZoom(z);
-        if (z < normalizeSettings(latest.current.settings).clusterBelowZoom !== groupedRef.current) pushAssets(m);
       });
       m.on("moveend", () => {
         setBounds(m.getBounds());
@@ -605,23 +576,16 @@ export default function MapView(props: Props) {
         const cluster = hits.find((f) => f.layer?.id === "clusters");
         if (cluster && cluster.geometry.type === "Point") {
           const center = cluster.geometry.coordinates as LngLat;
-          const members = cluster.properties?.gid ? groupsRef.current.get(cluster.properties.gid) : undefined;
-          const mb = mbRef.current;
-          if (members?.length && mb) {
-            // A distance group only opens up past the cluster zoom: frame its vehicles there.
-            const b = new mb.LngLatBounds(members[0], members[0]);
-            members.forEach((pt) => b.extend(pt));
-            const minZoom = normalizeSettings(P.settings).clusterBelowZoom + 0.05;
-            // Members stacked on one spot give a zero-size box, which Mapbox can't frame.
-            const cam = b.getWest() === b.getEast() && b.getSouth() === b.getNorth() ? undefined : m.cameraForBounds(b, { padding: 80 });
-            const camCenter = cam?.center ? mb.LngLat.convert(cam.center) : null;
-            const ok = camCenter && Number.isFinite(camCenter.lng) && Number.isFinite(camCenter.lat) && Number.isFinite(cam?.zoom);
-            m.easeTo({ center: ok ? camCenter : center, zoom: ok ? Math.max(cam!.zoom!, minZoom) : minZoom, duration: 700 });
+          const minZoom = normalizeSettings(P.settings).clusterBelowZoom + 0.05;
+          // A lone asset's “1” bubble: go to it at the markers tier.
+          if (cluster.properties?.cluster_id == null) {
+            m.easeTo({ center, zoom: Math.max(m.getZoom(), minZoom), duration: 600 });
             return;
           }
-          (m.getSource("assets") as GeoJSONSource).getClusterExpansionZoom(cluster.properties?.cluster_id, (err, z) => {
+          (m.getSource("asset-clusters") as GeoJSONSource).getClusterExpansionZoom(cluster.properties?.cluster_id, (err, z) => {
             if (err || z == null) return;
-            m.easeTo({ center, zoom: z + 0.25, duration: 600 });
+            // Zoom in to where the cluster splits, but never past the markers tier.
+            m.easeTo({ center, zoom: Math.min(Math.max(z + 0.25, m.getZoom() + 1), minZoom), duration: 600 });
           });
           return;
         }
@@ -671,7 +635,7 @@ export default function MapView(props: Props) {
         const cluster = hits.find((f) => f.layer?.id === "clusters");
         const fence = hits.find((f) => f.layer?.id === "geofence-fill");
 
-        setBubbleHover(m, !pin && cluster ? (cluster.properties?.gid ? { gid: cluster.properties.gid } : { clusterId: cluster.id }) : null);
+        setBubbleHover(m, !pin && cluster ? (cluster.properties?.cluster_id == null ? { assetId: cluster.properties?.id } : { clusterId: cluster.id }) : null);
         if (pin) setHover({ kind: "asset", id: pin.properties?.id });
         else setHover(null);
 
@@ -722,7 +686,7 @@ export default function MapView(props: Props) {
       pushAssets(m);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.clusterBelowZoom, settings.imageFromZoom, settings.groupDistance, settings.clusterMinPoints]);
+  }, [settings.clusterBelowZoom, settings.imageFromZoom]);
 
   /* Style switch (layers are re-added on style.load) */
   const styleRef = useRef(settings.mapStyle);

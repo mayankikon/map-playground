@@ -65,7 +65,7 @@ body {
   filter: saturate(0.9);
 }
 .img-marker-host.is-dim > * {
-  opacity: 0.52;
+  opacity: 0.42;
 }
 .img-marker-host > * {
   transform-origin: bottom center;

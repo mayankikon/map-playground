@@ -124,6 +124,8 @@ export default function AssetMapApp() {
   const [focusKeyId, setFocusKeyId] = useState<string | null>(null);
   /** V0: key row hovered in the flat Keys list — its tag is shown on the map, the rest dims. */
   const [listHoverKeyId, setListHoverKeyId] = useState<string | null>(null);
+  /** V0: key row clicked — stays selected while its paired vehicle's drawer is open. */
+  const [clickedKeyId, setClickedKeyId] = useState<string | null>(null);
   const [roomImages, setRoomImages] = useState<Record<string, string>>({});
   /** Vehicle whose editable card is open next to its details page ("Edit details"). */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -327,6 +329,8 @@ export default function AssetMapApp() {
   const allKeys = useMemo(() => applyFilters(assets.filter((a) => a.typeId === "key"), filters, ""), [assets, filters]);
 
   const selectedIsVehicle = !!selectedAsset && TYPE_BY_ID[selectedAsset.typeId]?.kind === "vehicle";
+  // The clicked key counts as selected only while its vehicle's drawer is open.
+  const selectedKeyId = clickedKeyId && selectedIsVehicle && assets.find((a) => a.id === clickedKeyId)?.vehicleId === selectedAssetId ? clickedKeyId : null;
   const pairedKeys = useMemo(() => {
     if (!selectedAsset || !selectedIsVehicle) return [];
     return assets
@@ -390,7 +394,13 @@ export default function AssetMapApp() {
   const openKeyVehicle = (keyId: string) => {
     const k = assets.find((a) => a.id === keyId);
     if (!k) return;
-    if (k.vehicleId && vehicleById.has(k.vehicleId)) leaveKeysFor(k.vehicleId);
+    const paired = !!k.vehicleId && vehicleById.has(k.vehicleId);
+    if (version === "v0") {
+      // V0: stay on the Keys tab — the key row stays selected and the vehicle drawer opens over the map.
+      if (!paired) return;
+      setClickedKeyId(k.id);
+      selectAsset(k.vehicleId!);
+    } else if (paired) leaveKeysFor(k.vehicleId!);
     else selectAsset(k.id);
     // Centre the key tag in the map area left visible by the vehicle drawer (left 16 + 400 px).
     const w = mapRef.current?.getContainer().clientWidth ?? 1200;
@@ -431,7 +441,8 @@ export default function AssetMapApp() {
       <KeysFlatList
         keys={allKeys}
         vehicleById={vehicleById}
-        selectedId={selectedAssetId}
+        selectedId={selectedKeyId}
+        hideCard={selectedIsVehicle && viewMode === "map"}
         onOpenKey={(id) => {
           setListHoverKeyId(null);
           openKeyVehicle(id);

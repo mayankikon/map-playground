@@ -100,6 +100,6 @@ export function assetTitle(a: Asset): string {
 }
 
 export const fmtMoney = (n?: number) => (n == null ? "—" : `$${n.toLocaleString("en-US")}`);
-/** Key / asset position as “lat, long” with 5 decimals (≈ 1 m). */
-export const fmtLatLng = (p: LngLat) => `${p[1].toFixed(5)}, ${p[0].toFixed(5)}`;
+/** Key / asset position as “lat, long” with 3 decimals. */
+export const fmtLatLng = (p: LngLat) => `${p[1].toFixed(3)}, ${p[0].toFixed(3)}`;
 export const fmtMiles = (n?: number) => (n == null ? "—" : `${n.toLocaleString("en-US")} miles`);

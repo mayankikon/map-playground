@@ -5,6 +5,8 @@ import { FIGMA, STOCK_COLOR, TYPE_BY_ID, assetTitle, fmtLatLng, fmtMiles, fmtMon
 import type { Asset, InventoryAge } from "@/lib/types";
 import { BatteryFull, BatteryLow, BatteryMedium } from "lucide-react";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
+import { useAddress } from "@/lib/address";
+import { KEY_HUBS } from "@/lib/hubs";
 import { useVehicleLookup, useVersion } from "./version";
 
 /*
@@ -159,6 +161,18 @@ export function AssetPreview({ asset }: { asset: Asset }) {
   );
 }
 
+/**
+ * Where a key is: its gateway (room) name when it sits in one, otherwise its street address.
+ * V0 has no gateways, so it always shows the address.
+ */
+export function useKeyPlace(k: Asset): { label: "Gateway" | "Address"; value: string } {
+  const version = useVersion();
+  const hub = version !== "v0" && k.hubId ? KEY_HUBS.find((h) => h.id === k.hubId) : undefined;
+  const address = useAddress(k.position, !hub);
+  if (hub) return { label: "Gateway", value: hub.name };
+  return { label: "Address", value: address === undefined ? "Looking up address…" : address ?? "Address unavailable" };
+}
+
 /** Key tooltip: Key ID (+ battery), the paired vehicle, last report. Clicking the key opens that vehicle. */
 function KeyPreview({ asset }: { asset: Asset }) {
   const vehicles = useVehicleLookup();
@@ -166,6 +180,7 @@ function KeyPreview({ asset }: { asset: Asset }) {
   const info = keyInfo(asset);
   // V0: no vehicle name or "Click to open vehicle" hint, just the key and its paired VIN.
   const v0 = useVersion() === "v0";
+  const place = useKeyPlace(asset);
   return (
     <PreviewShell>
       <div className="flex items-center gap-2">
@@ -185,6 +200,9 @@ function KeyPreview({ asset }: { asset: Asset }) {
         <Sub>Not paired to a vehicle</Sub>
       )}
       <Sub>Last reported: {ago(info.reportedMinutesAgo).replace(/^Updated /, "")}</Sub>
+      <p className="max-w-[268px] text-[14px] leading-[19px] text-[#666]">
+        {place.label}: {place.value}
+      </p>
       <Sub className="tabular-nums">Lat / Long: {fmtLatLng(asset.position)}</Sub>
       {v && !v0 && <p className="mt-1.5 text-[12px] font-semibold text-[#007cbe]">Click to open vehicle</p>}
     </PreviewShell>

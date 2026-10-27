@@ -70,18 +70,18 @@ function components(version: AppVersion): Change[] {
     specs: [
       ["Size", v0 ? "48 px frame, 32 px tag" : "48 px frame, 32 px tag; 85% (27 px tag) when scattered round a gateway"],
       ["Default", "fill #17A5E6, 2 px border #336C8B, radius 4, shadow 0 4 4 rgba(0,0,0,.25), inset 0 0 12 rgba(0,0,0,.15)"],
-      ["Hover", v0 ? "halo #336C8B at 40% (radius 14) + key tooltip above; in the Keys view every other marker, cluster and image card dims to 0.52 / 0.9 until the pointer leaves" : "halo #336C8B at 40% (radius 14) + key tooltip above"],
+      ["Hover", v0 ? "halo #336C8B at 40% (radius 14) + key tooltip above; in the Keys view every other marker, cluster and image card dims to 0.42 / 0.9 until the pointer leaves" : "halo #336C8B at 40% (radius 14) + key tooltip above"],
       ["Active", v0 ? "same halo, kept on: the row hovered in the Keys list (drawn above the dimmed map)" : "same halo, kept on: hovered row in the key panel, or the key picked from search; other tags dim"],
-      ["Dimmed", "opacity 0.52 + saturate(0.9)"],
+      ["Dimmed", "opacity 0.42 + saturate(0.9)"],
       ...(v0 ? ([["Stacking", "Keys stored in the same room sit on top of each other from zoom 18.6 — V0 has no aggregation for them (the overlap V1 / V2 solve with gateways)"]] as Row[]) : []),
-      ["Click", "opens the paired vehicle (drawer, Vehicles tab, map centred on the key); unpaired = no action"],
+      ["Click", v0 ? "opens the paired vehicle's drawer without leaving the current tab, map centred on the key; unpaired = no action" : "opens the paired vehicle (drawer, Vehicles tab, map centred on the key); unpaired = no action"],
     ],
   });
   list.push({
     title: "Key tooltip (map hover)",
     detail: "Card above the hovered key tag.",
     specs: [
-      ["Content", v0 ? "Key ID · paired vehicle VIN · Last reported · Lat / Long (no vehicle name, no click hint)" : `Key ID${v2 ? " + battery" : ""} · paired vehicle Year Make Model (14 px semibold) · VIN · Last reported · Lat / Long · “Click to open vehicle” (#007CBE)`],
+      ["Content", v0 ? "Key ID · paired vehicle VIN · Last reported · Address · Lat / Long (no vehicle name, no click hint)" : `Key ID${v2 ? " + battery" : ""} · paired vehicle Year Make Model (14 px semibold) · VIN · Last reported · Gateway name (key in a room) or street address (no gateway) · Lat / Long · “Click to open vehicle” (#007CBE)`],
       ["Unpaired", "“Not paired to a vehicle”, no CTA"],
       ["Shell", "white card, radius 8, shadow; caret centred under the card, no divider"],
     ],
@@ -104,10 +104,10 @@ function components(version: AppVersion): Change[] {
           title: "Keys list row (V0)",
           detail: "The Keys tab is one flat list of every key tag, sorted by Key ID — no rooms, no buckets, no stock type filter.",
           specs: [
-            ["Content", "Key ID 16 px semibold · lat, long 12 px #8F8F8F with pin icon, right-aligned · vehicle line 14 px #666 + stock type colour · chevron. No key icon, no battery, no report time"],
+            ["Content", "Key ID 16 px semibold · lat, long 12 px #8F8F8F with pin icon, right-aligned · vehicle line (Year Make Model) 14 px #666 · chevron. No key icon, battery, report time or stock type"],
             ["Default / hover / selected", "#FFFFFF / #F4F4F4 / #E5E5E5"],
-            ["Hover", "Key Details card beside the list; that key's tag is drawn above the dimmed map (everything else 0.52 / 0.9), and the map pans to it if it is off-screen (no zoom change)"],
-            ["Click", "whole row: paired vehicle drawer on the Vehicles tab, map centred on the key; unpaired = no action"],
+            ["Hover", "Key Details card beside the list; that key's tag is drawn above the dimmed map (everything else 0.42 / 0.9), and the map pans to it if it is off-screen (no zoom change)"],
+            ["Click", "whole row: stays on the Keys tab, the row stays selected (#E5E5E5) and the paired vehicle's drawer opens over the map, centred on the key; no Key Details card while the drawer is open; unpaired = no action"],
           ],
         }
       : {
@@ -116,7 +116,7 @@ function components(version: AppVersion): Change[] {
           specs: [
             ["Content", `Key ID 16 px semibold${v2 ? " · battery" : ""} · lat, long 12 px #8F8F8F with pin icon, right-aligned (replaces the report time) · vehicle line 14 px #666 + stock type colour · chevron`],
             ["Default / hover / selected", "#FFFFFF / #F4F4F4 / #E5E5E5"],
-            ["Hover", "opens the Key Details card beside the panel; its map tag goes active, the other tags dim to 0.52"],
+            ["Hover", "opens the Key Details card beside the panel; its map tag goes active, the other tags dim to 0.42"],
             ["Click", "whole row = Key ID: paired vehicle drawer, map centred on the key; vehicle line = vehicle framed with its keys"],
           ],
         },
@@ -128,12 +128,14 @@ function components(version: AppVersion): Change[] {
       [
         V(version),
         v0
-          ? "Key ID · Online badge │ Lat / Long │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price). No room, no Battery / Last reported block"
+          ? "Key ID │ Address · Lat / Long │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price). No room, no online / offline badge, no Battery / Last reported block"
           : v2
-            ? "Key ID · room · floor · Online badge │ Battery · Last reported │ Lat / Long │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price)"
-            : "Key ID · room · Online badge │ Lat / Long │ Paired vehicle (no Battery / Last reported block)",
+            ? "Key ID · room · floor · Online badge │ Battery · Last reported │ Gateway or Address · Lat / Long │ Paired vehicle (photo 72×54, name, VIN • stock, stock type • price)"
+            : "Key ID · room · Online badge │ Gateway or Address · Lat / Long │ Paired vehicle (no Battery / Last reported block)",
       ],
-      ["Lat / Long", "“32.92470, -97.06905”: latitude first, 5 decimals (≈ 1 m), tabular figures"],
+      ["Lat / Long", "“32.925, -97.069”: latitude first, 3 decimals max, tabular figures"],
+      ["Pointer", "stays open while the pointer moves from the row onto it (200 ms grace); closes when it leaves both"],
+      ["Click", v0 ? "anywhere on the card = clicking its row: opens the paired vehicle's drawer on the Keys tab, row selected, map centred on the key" : "anywhere on the card = clicking its row: opens the paired vehicle"],
       ["Unpaired", "“Not paired to a vehicle.”"],
     ],
   });
@@ -153,10 +155,10 @@ function components(version: AppVersion): Change[] {
       specs: [
         ["Default", "white fill, 1.5 px stroke #DCDCDC, shadow (black 22%, blur .5, y +4); count DIN Pro Bold 15"],
         ["Content", "The count only. No building / group icon at any zoom — the DS Map Marker “Group” style (building glyph) is not used; a cluster over the building reads as a plain number"],
-        ["Keys view", v0 ? "Keys follow the same rules as vehicles: below zoom 18.6 room keys (≥ 5 within 10 m) become number-only bubbles; from 18.6 every key is its own tag (no gateways)" : "Below zoom 16 keys stored in rooms count into the same number-only bubbles; from zoom 16 they become gateway markers"],
+        ["Keys view", v0 ? "Keys follow the same rules as vehicles: below zoom 18.6 every key is inside a number-only bubble (a lone key shows “1”); from 18.6 every key is its own tag (no gateways)" : "Below zoom 16 keys stored in rooms count into the same number-only bubbles; from zoom 16 they become gateway markers"],
         ["Size", "radius 15 px (< 100), 18 px (100–999), 22 px (≥ 1000)"],
         ["Hover", "fill #F1FFFA, stroke #99A3AD, ring #48A991 at 40% (radius + 10)"],
-        ["Dimmed", "opacity 0.52, shadow 0.114"],
+        ["Dimmed", "opacity 0.42, shadow 0.092"],
         ["Click", "zooms in until the vehicles separate into pins"],
       ],
     },
@@ -166,7 +168,7 @@ function components(version: AppVersion): Change[] {
       specs: [
         ["Default", "pin icon: 0–45 #00B397 · 46–90 #E6B117 · 90+ #E50C0C"],
         ["Hover / selected", "pin-hover icon variant + tooltip (Year Make Model, VIN • stock, stock type • price • miles)"],
-        ["Dimmed", "icon-opacity 0.52 and the “-dim” icon copy (saturation 0.9)"],
+        ["Dimmed", "icon-opacity 0.42 and the “-dim” icon copy (saturation 0.9)"],
       ],
     },
     {
@@ -176,7 +178,7 @@ function components(version: AppVersion): Change[] {
         ["Size", "74 × 44 shield, photo 54 × 28 radius 3, drop shadow 0 4 2 rgba(0,0,0,.25), anchored bottom-centre"],
         ["Hover / selected", "shield-hover variant + tooltip"],
         ["Non-reporting", "tag badge top-right"],
-        ["Dimmed", "marker filter saturate(0.9); card opacity 0.52"],
+        ["Dimmed", "marker filter saturate(0.9); card opacity 0.42"],
       ],
     },
     {
@@ -212,7 +214,7 @@ function changes(version: AppVersion): Change[] {
             title: "V0 key tooltip and vehicle drawer key rows",
             detail: "The map key tooltip drops the vehicle name and the “Click to open vehicle” hint (clicking still opens the vehicle). In the vehicle drawer's Location section, each paired key row is titled with its Key ID instead of a room name.",
             specs: [
-              ["Tooltip", "Key ID · VIN · Last reported · Lat / Long"],
+              ["Tooltip", "Key ID · VIN · Last reported · Address · Lat / Long"],
               ["Drawer key row", "title “Key ID: 433434”, subtitle “Updated N minutes ago”, locate button"],
             ],
           },
@@ -229,8 +231,9 @@ function changes(version: AppVersion): Change[] {
     },
     {
       title: "Key lat / long",
-      detail: `Every key shows its position as “lat, long” (latitude first, 5 decimals ≈ 1 m): right-aligned in each key row where the report time used to be (${v0 ? "Keys list" : "key panel"} — rows no longer show the time), in the Key Details card, and in the key tooltip on the map.`,
-      specs: [["Format", "32.92470, -97.06905 · 12 px #8F8F8F with a 12 px pin icon, right-aligned in rows; 13 px SemiBold #111 under “LAT / LONG” in the Key Details card; tooltip line “Lat / Long: …”"]],
+      detail: `Every key shows its position as “lat, long” (latitude first, 3 decimals max): right-aligned in each key row where the report time used to be (${v0 ? "Keys list" : "key panel"} — rows no longer show the time), in the Key Details card, and in the key tooltip on the map.`,
+      specs: [["Format", "32.925, -97.069 · 12 px #8F8F8F with a 12 px pin icon, right-aligned in rows; 13 px SemiBold #111 under “LAT / LONG” in the Key Details card; tooltip line “Lat / Long: …”"],
+        ["Place", v0 ? "Above lat / long in the tooltip and Key Details card: the key's street address (Mapbox reverse geocoding, cached per position; “Looking up address…” while loading). V0 has no gateways, so it's always the address." : "Above lat / long in the tooltip and Key Details card: the gateway (room) name when the key is in one, otherwise its street address (Mapbox reverse geocoding, cached per position). Never both."]],
     },
     {
       title: "Stock types",
@@ -239,8 +242,8 @@ function changes(version: AppVersion): Change[] {
         : "Vehicles can be New, Preowned, Loaner, Demo, Service or BVA. Every stock type control (map Stock Type filter, key panel filter, edit form) lists all six; each type has its own text colour.",
     },
     {
-      title: "Softer dimming (52%)",
-      detail: `Everything but the focus dims to opacity 0.52 (80% of the earlier 0.65) and saturation 0.9: other ${v0 ? "markers while a Keys list row or a key tag on the map (Keys view) is hovered" : "key tags while a key is hovered"}, and every other pin, cluster and image card while a vehicle is selected.`,
+      title: "Stronger dimming (42%)",
+      detail: `Everything but the focus dims to opacity 0.42 (80% of the earlier 0.52, which itself replaced 0.65) and saturation 0.9: other ${v0 ? "markers while a Keys list row or a key tag on the map (Keys view) is hovered" : "key tags while a key is hovered"}, and every other pin, cluster and image card while a vehicle is selected.`,
     },
     {
       title: "Collapsed list button shows totals",
@@ -271,7 +274,6 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
   const i = s.imageFromZoom;
   const v0 = version === "v0";
   const v2 = version === "v2";
-  const pixelMergeBelow = Math.max(0, Math.floor(c - 1)) + 1;
 
   // NG4-8068 AC3 — same clustering rules in every version; only the keys line differs.
   const zoomAC: AC = {
@@ -280,68 +282,62 @@ function tickets(s: DisplaySettings, version: AppVersion): Ticket[] {
     status: "covered",
     summary: `Clusters below ${c} · pins ${c}–${i} · image cards from ${i}.`,
     design: [
-      "Far out, nearby vehicles merge into clusters so the lot reads as density.",
-      `Below ${c}, clusters and pins appear side by side on purpose: only dense rows (≥ ${s.clusterMinPoints} cars chained within ${s.groupDistance} m) become a count bubble; cars parked apart stay pins.`,
-      `From ${c} every vehicle is its own pin; from ${i} pins become photo cards.`,
+      `Three strict tiers, one per zoom range — clusters and pins never share a zoom level:`,
+      `Below ${c}: clusters only. Every vehicle and key is inside a count bubble; a lone asset shows as a “1” bubble, never a pin.`,
+      `From ${c}: map marker pins only, every asset individual. From ${i}: pins become photo cards.`,
       v0
-        ? `Keys follow the same rules: below ${c} keys in a room (≥ ${s.clusterMinPoints} within ${s.groupDistance} m) become a number-only bubble; from ${c} every key is its own tag. There are no gateways in V0.`
+        ? `Keys follow the same tiers; there are no gateways in V0, so from ${c} keys stored in one room stack as individual tags.`
         : "Keys in rooms collapse into gateways from zoom 16.",
-      `Zoomed all the way out, a cluster is a number only — no building / group icon, even over the dealership building.${v0 ? "" : " The building itself is never a marker below zoom 16."}`,
+      `A cluster is a number only — no building / group icon, even over the dealership building.${v0 ? "" : " The building itself is never a marker below zoom 16."}`,
     ],
     deepDive: {
-      title: "How clustering decides: cluster or pin at the same zoom",
+      title: "How clustering works: one rule per zoom tier",
       steps: [
-        `Two rules stack. Rule A (ours) groups by real-world distance and runs below zoom ${c}. Rule B (Mapbox) merges by screen distance and runs only below zoom ${pixelMergeBelow}.`,
-        `Rule A, linking: any two vehicles ${s.groupDistance} m or less apart are linked, and links chain: if A–B and B–C are each ≤ ${s.groupDistance} m, A, B and C are one group even when A–C is further. (Single-linkage via a ${s.groupDistance} m spatial-hash grid + union-find, O(n).)`,
-        `Rule A, deciding: a group with ≥ ${s.clusterMinPoints} vehicles is sent to the map as ONE cluster feature at the group's centroid, weight = vehicle count. A group with fewer than ${s.clusterMinPoints} is sent as individual pins.`,
-        `Rule A is in metres, so groups don't change as you zoom between ${pixelMergeBelow} and ${c}. They are recomputed when the zoom crosses ${c}, when data changes, and when the map stops moving.`,
-        `Rule B: the Mapbox GeoJSON source has cluster: true, clusterRadius 50 px, clusterMaxZoom ${pixelMergeBelow - 1}. Below zoom ${pixelMergeBelow} it merges any features within 50 px (pins and Rule A bubbles alike) and sums their weight, so the far-out view stays tidy.`,
-        `At zoom ${c} Rule A switches off and every vehicle is sent as a pin; the cluster layers have maxzoom ${c}, so no bubble can leak past it.`,
-        `Clicking a bubble: Rule A group → frame its vehicles at zoom ≥ ${(c + 0.05).toFixed(2)} so they separate into pins. Rule B cluster → zoom to getClusterExpansionZoom() + 0.25.`,
+        `The earlier distance grouping (vehicles chained within ${s.groupDistance} m, ≥ ${s.clusterMinPoints} per group) is removed. It produced bubbles and pins side by side at the same zoom; the tiers are now strict.`,
+        `Two GeoJSON sources carry the same points. “asset-clusters” has cluster: true, clusterRadius 50 px and clusterMaxZoom 22, so it is always clustered; its bubble layers have maxzoom ${c}.`,
+        `“assets” is not clustered; the pin layer runs from minzoom ${c} to maxzoom ${i}, and image cards (HTML markers) take over from ${i}.`,
+        `Two sources are needed because supercluster only switches at whole zooms (${c} would round to ${Math.floor(c)} or ${Math.ceil(c)}); the layer min / max zooms make the switch exactly at ${c}.`,
+        `Below ${c}, a point with no neighbour inside 50 px stays unclustered in the source but is drawn by the same bubble layers as “1” (weight 1).`,
+        `Clicking a cluster zooms to getClusterExpansionZoom() + 0.25 (at least +1, at most ${(c + 0.05).toFixed(2)}); clicking a “1” bubble goes to ${(c + 0.05).toFixed(2)} on that asset, where it becomes a pin.`,
       ],
       bands: [
-        [`zoom < ${pixelMergeBelow}`, "Rule A + Rule B → mostly bubbles (count only, no building / group icon — including over the dealership building); a lone car far from others is still a pin"],
-        [`${pixelMergeBelow} – ${c}`, "Rule A only → bubbles for dense rows, pins for everything else (the mixed view)"],
-        [`${c} – ${i}`, v0 ? "No grouping → every vehicle is a pin and every key its own tag (room keys stack)" : "No grouping → every vehicle is a pin"],
+        [`zoom < ${c}`, "Clusters only (count bubbles, lone assets as “1”), no pins"],
+        [`${c} – ${i}`, v0 ? "Pins only → every vehicle is a pin and every key its own tag (room keys stack)" : "Pins only → every vehicle is a pin"],
         [`≥ ${i}`, "Every vehicle is an image card"],
       ],
       examples: [
-        `6 cars in a row, 2.75 m apart → one chained group of 6 ≥ ${s.clusterMinPoints} → bubble “6” until ${c}.`,
-        `2 cars side by side, 3 m apart → group of 2 < ${s.clusterMinPoints} → two pins, even at zoom 18.2.`,
-        `1 car parked alone → group of 1 → pin at every zoom.`,
-        `4 cars + 3 cars, 12 m apart → no link between the rows → 4 pins + 3 pins (each row < ${s.clusterMinPoints}).`,
+        `6 cars in a row → one bubble “6” below ${c}, six pins from ${c}.`,
+        `1 car parked alone → bubble “1” below ${c}, a pin from ${c}.`,
+        `Two rows 12 m apart → one or two bubbles depending on screen distance (50 px), never a mix of bubbles and pins.`,
       ],
-      code: `// below clusterBelowZoom (${c})
-groups = groupByDistance(vehicles, ${s.groupDistance} /* m */)
-for (g of groups)
-  g.length >= ${s.clusterMinPoints}
-    ? emit({ cluster, at: centroid(g), weight: g.length })
-    : g.forEach(emitPin)
-// at or above ${c}: vehicles.forEach(emitPin)
+      code: `// same FeatureCollection pushed to both sources
+map.addSource("asset-clusters", { type: "geojson", cluster: true,
+  clusterRadius: 50, clusterMaxZoom: 22,
+  clusterProperties: { weight: ["+", ["get", "weight"]] } })
+map.addSource("assets", { type: "geojson" })
 
-// mapbox source (merges on top, far out only)
-{ cluster: true, clusterRadius: 50,
-  clusterMaxZoom: ${pixelMergeBelow - 1},
-  clusterProperties: { weight: ["+", ["get", "weight"]] } }`,
+// bubbles: source "asset-clusters", maxzoom ${c}, no filter (singles = "1")
+// pins:    source "assets", minzoom ${c}, maxzoom ${i}
+// image cards (HTML markers) from ${i}`,
     },
     specs: [
-      [`zoom < ${c}`, "Clusters (count bubble) for dense groups"],
-      [`${c} ≤ zoom < ${i}`, "Map marker pins, coloured by inventory age"],
+      [`zoom < ${c}`, "Clusters only (count bubble; lone asset = “1”)"],
+      [`${c} ≤ zoom < ${i}`, "Map marker pins only, coloured by inventory age"],
       [`zoom ≥ ${i}`, "Image cards, bottom-centre anchored"],
-      ["Far-out tidy-up", `Mapbox clustering radius 50 px up to zoom ${pixelMergeBelow - 1} (clusterMaxZoom must be an integer)`],
+      ["Cluster radius", "50 px (Mapbox clustering, always on below the pin zoom)"],
       ["Bubble", "Count = summed weight; radius 15 px (< 100), 18 px (100–999), 22 px (≥ 1000)"],
     ],
     live: "zoom",
   };
 
   const dimSpecs: Row[] = [
-    ["Dimmed state", "opacity 0.52 + saturation 0.9 (10% less) on everything but the focus"],
-    ["asset-pins", "icon-opacity 1 → 0.52; icon-image swaps to “-dim” copies desaturated to 0.9 (symbols have no saturation paint)"],
-    ["clusters", "circle-opacity, circle-stroke-opacity 1 → 0.52 (bubbles are neutral, no saturation change needed)"],
-    ["cluster-count", "text-opacity 1 → 0.52"],
-    ["cluster-shadow", "circle-opacity 0.22 → 0.114"],
-    ["Image cards", "filter saturate(0.9) on the marker element; opacity 0.52 on the card inside it (Mapbox writes inline opacity on the marker element)"],
-    ["Key tags", "opacity 0.52 + saturate(0.9) on non-focused tags"],
+    ["Dimmed state", "opacity 0.42 + saturation 0.9 (10% less) on everything but the focus"],
+    ["asset-pins", "icon-opacity 1 → 0.42; icon-image swaps to “-dim” copies desaturated to 0.9 (symbols have no saturation paint)"],
+    ["clusters", "circle-opacity, circle-stroke-opacity 1 → 0.42 (bubbles are neutral, no saturation change needed)"],
+    ["cluster-count", "text-opacity 1 → 0.42"],
+    ["cluster-shadow", "circle-opacity 0.22 → 0.092"],
+    ["Image cards", "filter saturate(0.9) on the marker element; opacity 0.42 on the card inside it (Mapbox writes inline opacity on the marker element)"],
+    ["Key tags", "opacity 0.42 + saturate(0.9) on non-focused tags"],
   ];
 
   const overlap: Ticket = {
@@ -350,7 +346,7 @@ for (g of groups)
     blocks: "NG4-7766 (A-029), NG4-7762 (A-006)",
     objective: "One UX pattern for pins that share or nearly share a coordinate: cars parked bumper-to-bumper, hundreds of key tags in one key box.",
     decision: v0
-      ? "V0 is the baseline without key aggregation: vehicles and keys follow the same distance-cluster rules below street zoom, and from zoom 18.6 every key is its own tag — keys stored in one room stack. The Keys list is the reliable way to pick a key. V1 / V2 add gateways to solve this."
+      ? "V0 is the baseline without key aggregation: vehicles and keys follow the same strict zoom tiers (clusters only below 18.6), and from zoom 18.6 every key is its own tag — keys stored in one room stack. The Keys list is the reliable way to pick a key. V1 / V2 add gateways to solve this."
       : "Resolve overlap with zoom + aggregation, not by spreading pins on click. Dense vehicles stay a cluster until street zoom; keys in one key box collapse into a single gateway that opens a list. Spider / fan-out was prototyped and dropped: small targets, and it breaks down at high counts.",
     acs: [
       v0
@@ -427,9 +423,9 @@ for (g of groups)
         summary: v0 ? "Hover, selected and list-row hover are built; keyboard focus is not." : "Hover, selected and expanded/collapsed are built; keyboard focus is not.",
         design: [
           "Hover: tooltip card above the marker plus a soft halo; still works on dimmed markers.",
-          "Selected: the vehicle always renders as its image card (any zoom) with its 1–2 key tags; everything else is dimmed to 52% opacity and 90% saturation.",
+          "Selected: the vehicle always renders as its image card (any zoom) with its 1–2 key tags; everything else is dimmed to 42% opacity and 90% saturation.",
           v0
-            ? "Keys list row hover: the Key Details card opens beside the list and that key's tag is drawn above the dimmed map (0.52 / 0.9), panning to it if off-screen. Map key-tag hover (Keys view): the hovered tag stays full, everything else dims the same way."
+            ? "Keys list row hover: the Key Details card opens beside the list and that key's tag is drawn above the dimmed map (0.42 / 0.9), panning to it if off-screen. Map key-tag hover (Keys view): the hovered tag stays full, everything else dims the same way."
             : "Expanded / collapsed: a gateway opens into its key panel + tags and closes with ✕ or Esc. Hovering a key dims the other tags the same way.",
         ],
         specs: [["Selected camera", "fitBounds(vehicle + keys), padding T150 B60 L460 R90, maxZoom 19.5"], ...dimSpecs],
@@ -452,17 +448,18 @@ for (g of groups)
         summary: v0 ? "Keys list rows, the Key Details card and the map key tooltip all show the paired vehicle." : "Key panel rows, the key detail card and the map key tooltip all show the paired vehicle.",
         design: v0
           ? [
-              "Each Keys list row shows the Key ID, its lat / long, and the vehicle's Year Make Model and stock type underneath. No key icon, battery or report time.",
-              "Hovering a row opens the Key Details card beside the list: key, status, lat / long, then the paired vehicle's photo, VIN • stock and stock type • price. The key's tag is shown on the dimmed map.",
-              "Hovering any key tag on the map shows a tooltip: Key ID, paired vehicle VIN, last reported and lat / long (no vehicle name, no “Click to open vehicle” hint). Clicking still opens the paired vehicle.",
+              "Each Keys list row shows the Key ID, its lat / long, and the vehicle's Year Make Model underneath. No key icon, battery, report time or stock type.",
+              "Hovering a row opens the Key Details card beside the list: key, street address, lat / long, then the paired vehicle's photo, VIN • stock and stock type • price. The key's tag is shown on the dimmed map.",
+              "Hovering any key tag on the map shows a tooltip: Key ID, paired vehicle VIN, last reported, street address and lat / long (no vehicle name, no “Click to open vehicle” hint). Clicking still opens the paired vehicle.",
+              "Clicking a Keys list row, or anywhere on its Key Details card, keeps you on the Keys tab: that row stays selected, the paired vehicle's drawer opens over the map (in place of the Key Details card) and the map centres on the key.",
               "Vehicle details → Location: each paired key row is titled with its Key ID (e.g. “Key ID: 433434”) instead of a room name.",
-              "In the Keys view, hovering a key tag on the map keeps that tag at full strength and dims every other marker, cluster and image card to 0.52 / 0.9; leaving the tag restores them.",
+              "In the Keys view, hovering a key tag on the map keeps that tag at full strength and dims every other marker, cluster and image card to 0.42 / 0.9; leaving the tag restores them.",
             ]
           : [
               "Each row in the key panel shows the Key ID and its lat / long, with the vehicle's Year Make Model and stock type underneath.",
               "The panel's stock type filter always offers every type: All Stock Types, New, Preowned, Loaner, Demo, Service, BVA.",
-              `Hovering any key tag on the map shows a tooltip: Key ID${v2 ? " + battery" : ""}, paired vehicle Year Make Model and VIN, last reported, lat / long, and “Click to open vehicle”.`,
-              `Hovering a row opens the Key Details card: ${v2 ? "key, room · floor, status, battery, last reported, lat / long" : "key, room, status, lat / long"}, then the paired vehicle's photo, VIN • stock and stock type • price.`,
+              `Hovering any key tag on the map shows a tooltip: Key ID${v2 ? " + battery" : ""}, paired vehicle Year Make Model and VIN, last reported, gateway name (or street address when the key isn't in a room), lat / long, and “Click to open vehicle”.`,
+              `Hovering a row opens the Key Details card: ${v2 ? "key, room · floor, status, battery, last reported, gateway or address, lat / long" : "key, room, status, gateway or address, lat / long"}, then the paired vehicle's photo, VIN • stock and stock type • price.`,
             ],
         specs: v0
           ? [
@@ -509,7 +506,7 @@ for (g of groups)
         summary: "Back to the Vehicles list, vehicle details drawer open, same map.",
         design: [
           v0 ? "The list switches from Keys to Vehicles and the Vehicle Detail drawer opens on the left over the map. Filters stay as they were." : "The key panel closes, the list switches from Keys to Vehicles, and the Vehicle Detail drawer opens on the left over the map. Filters stay as they were.",
-          "The selected vehicle switches to its image card with its 1–2 key tags, and everything else dims to 52% opacity / 90% saturation.",
+          "The selected vehicle switches to its image card with its 1–2 key tags, and everything else dims to 42% opacity / 90% saturation.",
           v0 ? "Closing the drawer leaves you in the Vehicles view; the Keys tab reopens the flat keys list." : "Closing the drawer leaves you in the Vehicles view; the Keys tab reopens the gateway list.",
         ],
         specs: [
@@ -868,14 +865,11 @@ function ItemsSection({ title, subtitle, items }: { title: string; subtitle: str
 
 /** Live readout inside the zoom criterion: current zoom against the tier thresholds. */
 function LiveZoom({ settings, zoom }: { settings: DisplaySettings; zoom: number }) {
-  const tier = zoom >= settings.imageFromZoom ? "Image cards" : zoom < settings.clusterBelowZoom ? "Clusters + pins" : "Map pins";
-  const pixelMergeBelow = Math.max(0, Math.floor(settings.clusterBelowZoom - 1)) + 1;
+  const tier = zoom >= settings.imageFromZoom ? "Image cards" : zoom < settings.clusterBelowZoom ? "Clusters" : "Map pins";
   const rules =
     zoom >= settings.clusterBelowZoom
-      ? "No grouping: every vehicle is drawn individually"
-      : zoom < pixelMergeBelow
-        ? `Rule A (≥ ${settings.clusterMinPoints} within ${settings.groupDistance} m) + Rule B (Mapbox 50 px merge)`
-        : `Rule A only (≥ ${settings.clusterMinPoints} within ${settings.groupDistance} m); Mapbox merge is off`;
+      ? "No clustering: every vehicle is drawn individually"
+      : "Mapbox 50 px clustering; every asset is in a bubble (lone ones show “1”), no pins";
   return (
     <div className="mt-2.5 rounded-[6px] border border-[#ececec] px-2.5 py-2">
       <div className="flex items-center justify-between text-[12px]">

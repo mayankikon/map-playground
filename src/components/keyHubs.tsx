@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Map as MbMap } from "mapbox-gl";
 import { Briefcase, Building2, ChevronDown, ChevronRight, KeyRound, MapPin, Pencil, Radio, Store, Wrench, X } from "lucide-react";
 
-import { KeyBattery, PreviewShell } from "./markers";
+import { KeyBattery, PreviewShell, useKeyPlace } from "./markers";
 import { useVersion } from "./version";
 import { ago, keyInfo } from "@/lib/vehicleInfo";
 import { KEY_GROUPS, KEY_HUBS, type KeyHub, type KeyLocationId } from "@/lib/hubs";
@@ -52,6 +52,41 @@ export function buildLocations(byLocation: Map<KeyLocationId, Asset[]>, images: 
     // Lot / off-lot groups only show when they actually hold keys.
     ...KEY_GROUPS.map((g) => ({ id: `group:${g.id}`, name: g.name, image: v1 ? undefined : images[`group:${g.id}`], keys: byLocation.get(`group:${g.id}`) ?? [] })).filter((g) => g.keys.length > 0),
   ];
+}
+
+/**
+ * Hover card that survives the trip from a row to the card: leaving the row only hides it
+ * after a short delay, and entering the card cancels that.
+ */
+function useHoverCard<T>(onGone?: () => void) {
+  const [hovered, setHovered] = useState<T | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const goneRef = useRef(onGone);
+  useLayoutEffect(() => {
+    goneRef.current = onGone;
+  });
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const keep = () => window.clearTimeout(timer.current);
+  return {
+    hovered,
+    show: (h: T) => {
+      keep();
+      setHovered(h);
+    },
+    keep,
+    hide: () => {
+      keep();
+      setHovered(null);
+      goneRef.current?.();
+    },
+    leave: () => {
+      keep();
+      timer.current = window.setTimeout(() => {
+        setHovered(null);
+        goneRef.current?.();
+      }, 200);
+    },
+  };
 }
 
 const HUB_ICON = { cabinet: KeyRound, showroom: Store, parts: Wrench, tower: Building2, office: Briefcase } as const;
@@ -150,7 +185,8 @@ function LatLng({ position }: { position: [number, number] }) {
 /**
  * V0 Keys tab: every key tag is its own row (Key ID, last reported, paired vehicle), no icon,
  * no battery, no rooms / buckets and no stock type filter.
- * Clicking a row opens the paired vehicle (map centred on the key), like everywhere else.
+ * Clicking a row selects it and opens the paired vehicle's drawer on this tab (map centred on the key);
+ * while that drawer is open the hover card stays hidden so it doesn't cover it.
  */
 export function KeysFlatList({
   keys,
@@ -158,6 +194,7 @@ export function KeysFlatList({
   selectedId,
   onOpenKey,
   onHoverKey,
+  hideCard = false,
 }: {
   keys: Asset[];
   vehicleById: Map<string, Asset>;
@@ -165,9 +202,12 @@ export function KeysFlatList({
   onOpenKey: (keyId: string) => void;
   /** Row hovered (null on leave): the map shows that key's tag and dims the rest. */
   onHoverKey?: (keyId: string | null) => void;
+  /** No hover card (the vehicle drawer is open where it would show). */
+  hideCard?: boolean;
 }) {
   const sorted = [...keys].sort((a, b) => (a.code ?? "").localeCompare(b.code ?? ""));
-  const [hovered, setHovered] = useState<{ id: string; left: number; top: number } | null>(null);
+  const card = useHoverCard<{ id: string; left: number; top: number }>(() => onHoverKey?.(null));
+  const hovered = card.hovered;
   const hoveredKey = hovered ? keys.find((k) => k.id === hovered.id) : undefined;
   return (
     <>
@@ -176,11 +216,8 @@ export function KeysFlatList({
       </p>
       <ul
         className="min-h-0 flex-1 overflow-y-auto bg-white"
-        onMouseLeave={() => {
-          setHovered(null);
-          onHoverKey?.(null);
-        }}
-        onScroll={() => setHovered(null)}
+        onMouseLeave={card.leave}
+        onScroll={card.hide}
       >
         {sorted.map((k) => {
           const v = k.vehicleId ? vehicleById.get(k.vehicleId) : undefined;
@@ -191,7 +228,7 @@ export function KeysFlatList({
               onMouseEnter={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
                 // Card sits just right of the list, top aligned to the row (clamped to the viewport).
-                setHovered({ id: k.id, left: r.right + 12, top: Math.min(r.top - 8, window.innerHeight - 330) });
+                card.show({ id: k.id, left: r.right + 12, top: Math.min(r.top - 8, window.innerHeight - 330) });
                 onHoverKey?.(k.id);
               }}
             >
@@ -208,12 +245,6 @@ export function KeysFlatList({
                   </span>
                   <span className="block truncate text-[14px] text-[#666]">
                     {vehicleLine(v)}
-                    {v?.condition && (
-                      <>
-                        {" · "}
-                        <span style={{ color: CONDITION_COLOR[v.condition] }}>{v.condition}</span>
-                      </>
-                    )}
                   </span>
                 </span>
                 <ChevronRight size={16} className="shrink-0 text-[#666]" />
@@ -222,8 +253,15 @@ export function KeysFlatList({
           );
         })}
       </ul>
-      {hoveredKey && hovered && (
-        <KeyDetailsCard k={hoveredKey} vehicle={hoveredKey.vehicleId ? vehicleById.get(hoveredKey.vehicleId) : undefined} fixed={{ left: hovered.left, top: hovered.top }} />
+      {hoveredKey && hovered && !hideCard && (
+        <KeyDetailsCard k={hoveredKey} vehicle={hoveredKey.vehicleId ? vehicleById.get(hoveredKey.vehicleId) : undefined} fixed={{ left: hovered.left, top: hovered.top }}
+          onMouseEnter={card.keep}
+          onMouseLeave={card.leave}
+          onOpen={() => {
+            card.hide();
+            onOpenKey(hoveredKey.id);
+          }}
+        />
       )}
     </>
   );
@@ -236,17 +274,44 @@ export function KeysFlatList({
  * Key hover card. In the key panel (V1 / V2) it sits beside the panel at `top`; in the V0 list,
  * which has no rooms, it is positioned `fixed` beside the list and shows no room line.
  */
-function KeyDetailsCard({ k, vehicle, location, top, fixed }: { k: Asset; vehicle?: Asset; location?: KeyLocation; top?: number; fixed?: { left: number; top: number } }) {
+function KeyDetailsCard({
+  k,
+  vehicle,
+  location,
+  top,
+  fixed,
+  onMouseEnter,
+  onMouseLeave,
+  onOpen,
+}: {
+  k: Asset;
+  vehicle?: Asset;
+  location?: KeyLocation;
+  top?: number;
+  fixed?: { left: number; top: number };
+  /** The pointer can move onto the card (it stays open while hovered). */
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+  /** Clicking anywhere on the card does what clicking its row does (open the paired vehicle). */
+  onOpen?: () => void;
+}) {
   const online = location?.hub?.online ?? k.reporting;
   const info = keyInfo(k);
+  const place = useKeyPlace(k);
   // V0 / V1: no battery / last reported block — the key, its position and its vehicle.
   const version = useVersion();
   const v1 = version !== "v2";
   return (
     <div
-      role="tooltip"
+      role={onOpen ? "button" : "tooltip"}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={onOpen ? `${assetTitle(k)}: open ${vehicle ? vehicleLine(vehicle) : "paired vehicle"}` : undefined}
+      onClick={onOpen}
+      onKeyDown={onOpen ? (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen()) : undefined}
       style={fixed ? { left: fixed.left, top: fixed.top } : { top }}
-      className={`pointer-events-none ${fixed ? "fixed" : "absolute left-[476px]"} z-[60] w-[300px] rounded-[8px] bg-white p-4 shadow-[0_8px_28px_rgba(0,0,0,.24)] ring-1 ring-[#dcdcdc] animate-[pop-in_120ms_ease-out]`}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className={`${onOpen ? "cursor-pointer hover:ring-[#99a3ad] " : ""}${fixed ? "fixed" : "absolute left-[476px]"} z-[60] w-[300px] rounded-[8px] bg-white p-4 shadow-[0_8px_28px_rgba(0,0,0,.24)] ring-1 ring-[#dcdcdc] animate-[pop-in_120ms_ease-out]`}
     >
       <div className="flex items-center gap-2">
         <span className="grid size-8 place-items-center rounded-[6px] border-2 border-[#336c8b] bg-[#17a5e6] text-white">
@@ -262,7 +327,8 @@ function KeyDetailsCard({ k, vehicle, location, top, fixed }: { k: Asset; vehicl
             </p>
           )}
         </div>
-        <OnlineBadge online={online} />
+        {/* V0: no online / offline status. */}
+        {version !== "v0" && <OnlineBadge online={online} />}
       </div>
       {!v1 && (
       <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-[#eee] pt-3">
@@ -279,7 +345,9 @@ function KeyDetailsCard({ k, vehicle, location, top, fixed }: { k: Asset; vehicl
       </dl>
       )}
       <div className="mt-3 border-t border-[#eee] pt-3">
-        <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">Lat / Long</p>
+        <p className="text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">{place.label}</p>
+        <p className="mt-0.5 text-[13px] font-semibold text-[#111]">{place.value}</p>
+        <p className="mt-2 text-[11px] font-bold uppercase tracking-[1.2px] text-[#8f8f8f]">Lat / Long</p>
         <p className="mt-0.5 text-[13px] font-semibold tabular-nums text-[#111]">{fmtLatLng(k.position)}</p>
       </div>
       <div className="mt-3 border-t border-[#eee] pt-3">
@@ -330,7 +398,8 @@ export function KeyLocationPanel({
   onRoomImage?: (locationId: string, dataUrl: string) => void;
   onClose: () => void;
 }) {
-  const [hovered, setHovered] = useState<{ id: string; top: number } | null>(null);
+  const card = useHoverCard<{ id: string; top: number }>(() => onHoverKey?.(null));
+  const hovered = card.hovered;
   const sectionRef = useRef<HTMLElement>(null);
   const [stock, setStock] = useState<Condition | "all">("all");
   const [open, setOpen] = useState(false);
@@ -352,10 +421,7 @@ export function KeyLocationPanel({
     <>
     <section
       ref={sectionRef}
-      onMouseLeave={() => {
-        setHovered(null);
-        onHoverKey?.(null);
-      }}
+      onMouseLeave={card.leave}
       aria-label={`${location.name} keys`}
       onKeyDown={(e) => e.key === "Escape" && onClose()}
       className="absolute bottom-4 left-4 top-[76px] z-40 flex w-[450px] flex-col overflow-hidden rounded-[6px] bg-white shadow-[0_8px_28px_rgba(0,0,0,.28)] animate-[pop-in_140ms_ease-out]"
@@ -456,7 +522,7 @@ export function KeyLocationPanel({
                 const s = sectionRef.current?.getBoundingClientRect();
                 const r = e.currentTarget.getBoundingClientRect();
                 // Card top in map coordinates: panel offset (76px) + row offset inside the panel.
-                if (s) setHovered({ id: k.id, top: 76 + (r.top - s.top) - 8 });
+                if (s) card.show({ id: k.id, top: 76 + (r.top - s.top) - 8 });
                 onHoverKey?.(k.id);
               }}
             >
@@ -514,7 +580,15 @@ export function KeyLocationPanel({
       </ul>
     </section>
     {hoveredKey && (
-      <KeyDetailsCard k={hoveredKey} vehicle={hoveredKey.vehicleId ? vehicleById.get(hoveredKey.vehicleId) : undefined} location={location} top={hovered!.top} />
+      <KeyDetailsCard k={hoveredKey} vehicle={hoveredKey.vehicleId ? vehicleById.get(hoveredKey.vehicleId) : undefined} location={location}
+        top={hovered!.top}
+        onMouseEnter={card.keep}
+        onMouseLeave={card.leave}
+        onOpen={() => {
+          card.hide();
+          onOpenKey(hoveredKey.id);
+        }}
+      />
     )}
     </>
   );
