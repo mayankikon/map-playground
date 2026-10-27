@@ -409,33 +409,20 @@ export default function AssetMapApp() {
     const dx = w > 640 ? 208 : 0;
     fly({ kind: "point", center: k.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5), offset: [dx, 0] });
   };
-  /** Vehicle clicked: open it and go to it. */
-  /**
-   * Frame a vehicle together with its key tags (they live in the building, often off-screen),
-   * leaving room for the details panel on the left. Returns false if it has no keys.
-   */
-  const frameVehicleWithKeys = (vehicleId: string, onlyIfHidden = false) => {
+  /** Centre a vehicle in the map area left visible by the vehicle drawer (left 16 + 400 px). */
+  const centerVehicle = (vehicleId: string) => {
     const v = vehicleById.get(vehicleId);
-    const keys = assets.filter((a) => a.typeId === "key" && a.vehicleId === vehicleId);
-    if (!v || !keys.length) return false;
-    const pts = [v.position, ...keys.map((k) => k.position)];
-    const b = mapRef.current?.getBounds();
-    if (onlyIfHidden && b && pts.every((p) => b.contains(p))) return true;
-    // Padding must leave some map: on narrow screens the panel side shrinks to fit.
-    const el = mapRef.current?.getContainer();
-    const w = el?.clientWidth ?? 1200;
-    const h = el?.clientHeight ?? 800;
-    const left = Math.min(460, Math.max(40, w - 260));
-    const pad = { top: Math.min(150, h * 0.3), bottom: Math.min(60, h * 0.1), left, right: Math.min(90, Math.max(20, w - left - 200)) };
-    fly({ kind: "bounds", points: pts, padding: pad, maxZoom: 19.5 });
-    return true;
+    if (!v) return;
+    const w = mapRef.current?.getContainer().clientWidth ?? 1200;
+    const dx = w > 640 ? 208 : 0;
+    fly({ kind: "point", center: v.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5), offset: [dx, 0] });
   };
   const openVehicle = (vehicleId: string) => {
     const v = vehicleById.get(vehicleId);
     if (!v) return;
     setClickedKeyId(null);
     leaveKeysFor(v.id);
-    if (!frameVehicleWithKeys(v.id)) fly({ kind: "point", center: v.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5) });
+    centerVehicle(v.id);
   };
 
   // V0: flat list of every key tag; V1 / V2: rooms (gateways) and In Lot / Off Lot buckets.
@@ -469,7 +456,8 @@ export default function AssetMapApp() {
     selectAsset(id);
     const a = assets.find((x) => x.id === id);
     if (a && !inView(a, view)) setView(TYPE_BY_ID[a.typeId]?.kind === "key" ? "keys" : "vehicles");
-    if (a && !(a.typeId.startsWith("vehicle") && frameVehicleWithKeys(a.id))) fly({ kind: "point", center: a.position });
+    if (a && vehicleById.has(a.id)) centerVehicle(a.id);
+    else if (a) fly({ kind: "point", center: a.position });
     if (viewMode === "list") setViewMode("map");
   };
   const selectGeofence = (id: string) => {
@@ -533,7 +521,7 @@ export default function AssetMapApp() {
                   }
                   setClickedKeyId(null);
                   selectAsset(id);
-                  if (id && vehicleById.has(id)) frameVehicleWithKeys(id, true);
+                  if (id && vehicleById.has(id)) centerVehicle(id);
                 }}
                 onSelectGeofence={setSelectedGeofenceId}
                 onDraftAdd={(p) => setDraft((d) => [...d, p])}

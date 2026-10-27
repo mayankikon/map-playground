@@ -242,6 +242,10 @@ function changes(version: AppVersion): Change[] {
         : "Vehicles can be New, Preowned, Loaner, Demo, Service or BVA. Every stock type control (map Stock Type filter, key panel filter, edit form) lists all six; each type has its own text colour.",
     },
     {
+      title: "Selected vehicle is centred",
+      detail: "Selecting a vehicle (map click, list row, search or link) flies the camera to the vehicle itself, centred in the map area beside the vehicle drawer (+208 px x offset; none below 640 px). It no longer fits the vehicle and its keys, which left the vehicle off-centre. Opening from a Key ID still centres that key.",
+    },
+    {
       title: "Dimming: 48% opacity, 80% saturation",
       detail: `Everything but the focus dims to opacity 0.48 (up from 0.42, which replaced 0.52 and 0.65) and saturation 0.8 (down from 0.9): other ${v0 ? "markers while a Keys list row or a key tag on the map (Keys view) is hovered" : "key tags while a key is hovered"}, and every other pin, cluster and image card while a vehicle is selected.`,
     },
@@ -429,7 +433,7 @@ map.addSource("assets", { type: "geojson" })
             ? "Keys list row hover: the Key Details card opens beside the list and that key's tag is drawn above the dimmed map (0.48 / 0.8), panning to it if off-screen. Map key-tag hover (Keys view): the hovered tag stays full, everything else dims the same way."
             : "Expanded / collapsed: a gateway opens into its key panel + tags and closes with ✕ or Esc. Hovering a key dims the other tags the same way.",
         ],
-        specs: [["Selected camera", "fitBounds(vehicle + keys), padding T150 B60 L460 R90, maxZoom 19.5"], ...dimSpecs],
+        specs: [["Selected camera", "flyTo(vehicle, zoom ≥ 19.1) with offset +208 px x: the vehicle sits in the centre of the map area right of the 416 px drawer (no offset on maps < 640 px)"], ...dimSpecs],
         gap: v0 ? "Keyboard focus ring for pins and key tags isn't defined yet." : "Keyboard focus ring for pins and key tags isn't defined yet (gateways have one).",
       },
     ],
@@ -513,7 +517,7 @@ map.addSource("assets", { type: "geojson" })
         specs: [
           ["Drawer", "400 px wide, left 16 / top 76 / bottom 16, radius 6, z-40"],
           ["Drawer content", "Gallery · title + price/miles · actions · INFO / TRIPS · Location (lot + each key) · Basics (all Key IDs) · Specs · CARFAX · Safety"],
-          ["Camera", `${v0 ? "" : "Vehicle link: fitBounds(vehicle + keys). "}Key ID / row: flyTo(key, zoom ≥ 19.1) with offset +208 px x, so the key tag sits in the centre of the map area right of the 416 px drawer (no offset on maps < 640 px)`],
+          ["Camera", `Vehicle (map click, list, search, link): flyTo(vehicle, zoom ≥ 19.1), centred in the map area right of the drawer. Key ID / row: flyTo(key, zoom ≥ 19.1) with offset +208 px x, so the key tag sits in the centre of the map area right of the 416 px drawer (no offset on maps < 640 px)`],
         ],
       },
       {
