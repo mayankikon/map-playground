@@ -124,7 +124,7 @@ export default function AssetMapApp() {
   const [focusKeyId, setFocusKeyId] = useState<string | null>(null);
   /** V0: key row hovered in the flat Keys list — its tag is shown on the map, the rest dims. */
   const [listHoverKeyId, setListHoverKeyId] = useState<string | null>(null);
-  /** V0: key row clicked — stays selected while its paired vehicle's drawer is open. */
+  /** Key clicked to open its vehicle: the only highlighted key tag (V0: its row stays selected) while that drawer is open. */
   const [clickedKeyId, setClickedKeyId] = useState<string | null>(null);
   const [roomImages, setRoomImages] = useState<Record<string, string>>({});
   /** Vehicle whose editable card is open next to its details page ("Edit details"). */
@@ -400,8 +400,10 @@ export default function AssetMapApp() {
       if (!paired) return;
       setClickedKeyId(k.id);
       selectAsset(k.vehicleId!);
-    } else if (paired) leaveKeysFor(k.vehicleId!);
-    else selectAsset(k.id);
+    } else if (paired) {
+      setClickedKeyId(k.id);
+      leaveKeysFor(k.vehicleId!);
+    } else selectAsset(k.id);
     // Centre the key tag in the map area left visible by the vehicle drawer (left 16 + 400 px).
     const w = mapRef.current?.getContainer().clientWidth ?? 1200;
     const dx = w > 640 ? 208 : 0;
@@ -431,6 +433,7 @@ export default function AssetMapApp() {
   const openVehicle = (vehicleId: string) => {
     const v = vehicleById.get(vehicleId);
     if (!v) return;
+    setClickedKeyId(null);
     leaveKeysFor(v.id);
     if (!frameVehicleWithKeys(v.id)) fly({ kind: "point", center: v.position, zoom: Math.max(zoom, settings.clusterBelowZoom + 0.5) });
   };
@@ -462,6 +465,7 @@ export default function AssetMapApp() {
   const placingType = mode.kind === "place" ? TYPE_BY_ID[mode.typeId] : null;
 
   const selectAndFly = (id: string) => {
+    setClickedKeyId(null);
     selectAsset(id);
     const a = assets.find((x) => x.id === id);
     if (a && !inView(a, view)) setView(TYPE_BY_ID[a.typeId]?.kind === "key" ? "keys" : "vehicles");
@@ -527,6 +531,7 @@ export default function AssetMapApp() {
                     if (k.vehicleId && vehicleById.has(k.vehicleId)) openKeyVehicle(k.id);
                     return;
                   }
+                  setClickedKeyId(null);
                   selectAsset(id);
                   if (id && vehicleById.has(id)) frameVehicleWithKeys(id, true);
                 }}
@@ -536,6 +541,8 @@ export default function AssetMapApp() {
                 onZoom={setZoom}
                 focusVehicle={selectedIsVehicle ? selectedAsset : null}
                 focusKeys={focusKeys}
+                focusKeyId={selectedKeyId}
+                onPickFocusKey={openKeyVehicle}
                 dim={(!!openLocation && showKeys && viewMode === "map") || (version === "v0" && !!listHoverKeyId)}
                 dimOnKeyHover={version === "v0" && showKeys}
                 onReady={(m) => {
@@ -716,6 +723,7 @@ export default function AssetMapApp() {
                 batteryLow={batteryLow(selectedAsset)}
                 onClose={() => {
                   setSelectedAssetId(null);
+                  setClickedKeyId(null);
                   setEditingId(null);
                 }}
                 onFly={(p) => fly({ kind: "point", center: p, zoom: Math.max(zoom, settings.imageFromZoom + 0.3) })}

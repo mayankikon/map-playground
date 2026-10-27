@@ -36,6 +36,9 @@ interface Props {
   /** Selected vehicle: always drawn as its image card, with its paired keys; everything else dims. */
   focusVehicle?: Asset | null;
   focusKeys?: Asset[];
+  /** Key the focused vehicle was opened from: the only highlighted key tag. */
+  focusKeyId?: string | null;
+  onPickFocusKey?: (keyId: string) => void;
   /** Dim every regular marker to 50% (e.g. while a key room is open). */
   dim?: boolean;
   /** V0 Keys view: hovering a key marker dims every other marker, the hovered key stays full. */
@@ -857,7 +860,7 @@ export default function MapView(props: Props) {
         )}
       </div>
 
-      {map && props.focusVehicle && <FocusOverlay map={map} vehicle={props.focusVehicle} keys={props.focusKeys ?? []} />}
+      {map && props.focusVehicle && <FocusOverlay map={map} vehicle={props.focusVehicle} keys={props.focusKeys ?? []} activeKeyId={props.focusKeyId} onPickKey={props.onPickFocusKey} />}
 
       {portals.map(([id, el]) => {
         const a = assetById.get(id);

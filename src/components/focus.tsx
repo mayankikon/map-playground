@@ -10,7 +10,21 @@ import type { Asset } from "@/lib/types";
  * Selected-vehicle focus: the vehicle always renders as its image card (whatever
  * the zoom tier), and its paired keys render at full strength. Everything else on the map is dimmed by MapView.
  */
-export function FocusOverlay({ map, vehicle, keys }: { map: MbMap; vehicle: Asset; keys: Asset[] }) {
+export function FocusOverlay({
+  map,
+  vehicle,
+  keys,
+  activeKeyId,
+  onPickKey,
+}: {
+  map: MbMap;
+  vehicle: Asset;
+  keys: Asset[];
+  /** The key the vehicle was opened from: only it is highlighted, its sibling keys dim. */
+  activeKeyId?: string | null;
+  /** Clicking a sibling key makes it the active one. */
+  onPickKey?: (keyId: string) => void;
+}) {
   const vehicleRef = useRef<HTMLDivElement>(null);
   const keyRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -59,8 +73,13 @@ export function FocusOverlay({ map, vehicle, keys }: { map: MbMap; vehicle: Asse
           }}
           className="absolute left-0 top-0 h-0 w-0"
         >
-          <div className="group pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 animate-[pop-in_160ms_ease-out]">
-            <KeyMarker active />
+          <div
+            onClick={() => k.id !== activeKeyId && onPickKey?.(k.id)}
+            className={`group pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 animate-[pop-in_160ms_ease-out] transition-opacity duration-150 ${
+              activeKeyId && k.id !== activeKeyId ? "cursor-pointer opacity-[.42] saturate-[.9] hover:opacity-100 hover:saturate-100" : ""
+            }`}
+          >
+            <KeyMarker active={!activeKeyId || k.id === activeKeyId} />
             <span className="pointer-events-none absolute bottom-[calc(100%-2px)] left-1/2 hidden -translate-x-1/2 group-hover:block">
               <span className="block w-max">
                 <AssetPreview asset={k} />

@@ -424,6 +424,7 @@ map.addSource("assets", { type: "geojson" })
         design: [
           "Hover: tooltip card above the marker plus a soft halo; still works on dimmed markers.",
           "Selected: the vehicle always renders as its image card (any zoom) with its 1–2 key tags; everything else is dimmed to 42% opacity and 90% saturation.",
+          "Opened from a key: only that key tag is highlighted; the vehicle's other paired key is dimmed (42% / 90%) and clicking it makes it the active key (map re-centres on it). Opened from the vehicle itself: all its key tags are highlighted.",
           v0
             ? "Keys list row hover: the Key Details card opens beside the list and that key's tag is drawn above the dimmed map (0.42 / 0.9), panning to it if off-screen. Map key-tag hover (Keys view): the hovered tag stays full, everything else dims the same way."
             : "Expanded / collapsed: a gateway opens into its key panel + tags and closes with ✕ or Esc. Hovering a key dims the other tags the same way.",
