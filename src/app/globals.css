@@ -62,10 +62,10 @@ body {
 /* Everything except the selected vehicle and its keys fades while a vehicle is focused.
    Applied to the card, not the host: Mapbox writes an inline opacity on the marker element. */
 .img-marker-host.is-dim {
-  filter: saturate(0.9);
+  filter: saturate(0.8);
 }
 .img-marker-host.is-dim > * {
-  opacity: 0.42;
+  opacity: 0.48;
 }
 .img-marker-host > * {
   transform-origin: bottom center;

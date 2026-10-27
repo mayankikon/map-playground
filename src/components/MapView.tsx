@@ -46,9 +46,9 @@ interface Props {
 }
 
 /** 50% opacity on every regular marker layer; hover and click still work. */
-/** Dimmed (everything but the focus): 42% opacity and 10% less saturation. */
-export const DIM_OPACITY = 0.42;
-const DIM_SATURATION = 0.9;
+/** Dimmed (everything but the focus): 48% opacity and 20% less saturation. */
+export const DIM_OPACITY = 0.48;
+const DIM_SATURATION = 0.8;
 const dimmedMaps = new WeakSet<MbMap>();
 
 /** Dim every pin and cluster except one asset (the hovered key), which keeps its hover icon. */
