@@ -194,7 +194,7 @@ function components(version: AppVersion): Change[] {
     },
     {
       title: "Collapsed list button",
-      detail: "Left edge of the map when the list panel is collapsed.",
+      detail: "Left edge of the map when the list panel is collapsed. With a vehicle drawer open, the same button moves to the drawer's right edge (left 416 px, top 92 px, above the drawer) so the two read as one unit.",
       specs: [
         ["Content", "“Show N vehicles & N keys” 14 px semibold + » icon; counts follow the map filters"],
         ["Hover", "#F4F4F4"],
@@ -240,6 +240,10 @@ function changes(version: AppVersion): Change[] {
       detail: v0
         ? "Vehicles can be New, Preowned, Loaner, Demo, Service or BVA. The map Stock Type filter and the edit form list all six; each type has its own text colour. The V0 Keys list has no stock type filter."
         : "Vehicles can be New, Preowned, Loaner, Demo, Service or BVA. Every stock type control (map Stock Type filter, key panel filter, edit form) lists all six; each type has its own text colour.",
+    },
+    {
+      title: "List button rides on the vehicle drawer",
+      detail: "With the list collapsed and a vehicle drawer open, “Show N vehicles & N keys” sits on the drawer's right edge instead of hiding under it. It's the same button, moved; closing the drawer returns it to the map edge.",
     },
     {
       title: "Selected vehicle is centred",

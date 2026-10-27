@@ -576,7 +576,8 @@ export default function AssetMapApp() {
                 type="button"
                 onClick={() => setListOpen(true)}
                 aria-label={`Show list: ${listCounts.vehicles} vehicles and ${listCounts.keys} keys`}
-                className="absolute left-0 top-[80px] z-20 flex items-center gap-2 rounded-r-[4px] border border-l-0 border-[#dcdcdc] bg-white py-2 pl-3 pr-1.5 shadow-[0_1px_3px_rgba(0,0,0,.2)] hover:bg-[#f4f4f4]"
+                // With the vehicle drawer open (left 16 + 400 px) the same button rides on its right edge.
+                className={`absolute ${selectedIsVehicle ? "left-[416px] top-[92px] z-40" : "left-0 top-[80px] z-20"} flex items-center gap-2 rounded-r-[4px] border border-l-0 border-[#dcdcdc] bg-white py-2 pl-3 pr-1.5 shadow-[0_1px_3px_rgba(0,0,0,.2)] hover:bg-[#f4f4f4]`}
               >
                 <span className="whitespace-nowrap text-[14px] font-semibold text-[#111]">
                   Show {listCounts.vehicles} vehicles & {listCounts.keys} keys
