@@ -117,7 +117,7 @@ function components(version: AppVersion): Change[] {
             ["Content", `Key ID 16 px semibold${v2 ? " · battery" : ""} · lat, long 12 px #8F8F8F with pin icon, right-aligned (replaces the report time) · vehicle line 14 px #666 + stock type colour · chevron`],
             ["Default / hover / selected", "#FFFFFF / #F4F4F4 / #E5E5E5"],
             ["Hover", "opens the Key Details card beside the panel; its map tag goes active, the other tags dim to 0.48"],
-            ["Click", "whole row = Key ID: paired vehicle drawer, map centred on the key; vehicle line = vehicle framed with its keys"],
+            ["Click", "whole row = Key ID: paired vehicle drawer, map centred on the key; vehicle line = vehicle drawer, map centred on the vehicle"],
           ],
         },
   );
@@ -197,6 +197,7 @@ function components(version: AppVersion): Change[] {
       detail: "Left edge of the map when the list panel is collapsed. With a vehicle drawer open, the same button moves to the drawer's right edge (left 416 px, top 92 px, above the drawer) so the two read as one unit.",
       specs: [
         ["Content", "“Show N vehicles & N keys” 14 px semibold + » icon; counts follow the map filters"],
+        ["Position", "list collapsed: left 0, top 80 px (z 20); vehicle drawer open: left 416 px, top 92 px (z 40), on the drawer's right edge"],
         ["Hover", "#F4F4F4"],
       ],
     },
@@ -222,7 +223,7 @@ function changes(version: AppVersion): Change[] {
       : []),
     {
       title: "Search vehicles and keys (relates to NG4-6631)",
-      detail: `Top-bar typeahead. Vehicles match on Year Make Model and VIN; keys match on Key ID. Every typed word must match; matched text is semibold. Results grouped Vehicles / Keys (6 each), neutral grey hover. Picking a vehicle opens its drawer (Vehicles tab) framed with its keys; picking a key ${v0 ? "opens its paired vehicle with the map centred on the key" : "opens its room / bucket, keeps that tag at full strength (others dimmed) and scrolls its row into view"}. ↑ ↓ Enter Esc.`,
+      detail: `Top-bar typeahead. Vehicles match on Year Make Model and VIN; keys match on Key ID. Every typed word must match; matched text is semibold. Results grouped Vehicles / Keys (6 each), neutral grey hover. Picking a vehicle opens its drawer (Vehicles tab) with the vehicle centred beside it; picking a key ${v0 ? "opens its paired vehicle with the map centred on the key" : "opens its room / bucket, keeps that tag at full strength (others dimmed) and scrolls its row into view"}. ↑ ↓ Enter Esc.`,
       specs: [
         ["Box", "360 px, placeholder “Search vehicle, VIN or Key ID”, clear (✕) button"],
         ["Results", "420 px dropdown; vehicle row = photo + name + VIN; key row = key icon + Key ID only; no counts"],
@@ -501,7 +502,7 @@ map.addSource("assets", { type: "geojson" })
               "A Key ID picked in search opens the paired vehicle directly.",
             ]
           : [
-              "Vehicle line in a key row: opens the vehicle's details and frames it with its keys.",
+              "Vehicle line in a key row: opens the vehicle's details with the vehicle centred in the map area beside the drawer.",
               "Key ID, or anywhere else on the key row: opens the paired vehicle's details and centres the map on that key, for when you're walking to the key.",
               "Clicking any key on the map (room tag, In Lot / Off Lot tag, or a loose key pin) opens its paired vehicle. Keys never open an edit card; an unpaired key does nothing on click.",
             ],
